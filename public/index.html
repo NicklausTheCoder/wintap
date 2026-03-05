@@ -1,43 +1,479 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>React App</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>WinTap Games - Mobile Only</title>
+  <style>
+    /* RESET STYLES */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    /* BASE STYLES */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      color: white;
+    }
+    
+    /* ANIMATIONS */
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+    }
+    
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+    
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    @keyframes shimmer {
+      0% {
+        background-position: -1000px 0;
+      }
+      100% {
+        background-position: 1000px 0;
+      }
+    }
+    
+    /* MAIN CARD STYLES */
+    .blocker-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 215, 0, 0.3);
+      border-radius: 30px;
+      padding: 40px 30px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      animation: slideUp 0.5s ease;
+      position: relative;
+      z-index: 10;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* ICON STYLES */
+    .icon-container {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: float 3s infinite;
+      position: relative;
+      display: inline-block;
+    }
+    
+    .icon-container::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100px;
+      height: 100px;
+      background: radial-gradient(circle, rgba(251, 191, 36, 0.2) 0%, transparent 70%);
+      border-radius: 50%;
+      z-index: -1;
+      animation: pulse 2s infinite;
+    }
+    
+    /* TYPOGRAPHY */
+    h1 {
+      color: #fbbf24;
+      font-size: 32px;
+      margin-bottom: 15px;
+      font-weight: bold;
+      text-shadow: 0 2px 10px rgba(251, 191, 36, 0.3);
+    }
+    
+    .message {
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 25px;
+    }
+    
+    /* INSTRUCTION BOX */
+    .instruction-box {
+      background: rgba(251, 191, 36, 0.1);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 25px;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .instruction-box::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(251, 191, 36, 0.1),
+        transparent
+      );
+      animation: shimmer 3s infinite;
+      background-size: 200% 200%;
+    }
+    
+    .instruction-content {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .arrow-icon {
+      font-size: 48px;
+      animation: pulse 2s infinite;
+    }
+    
+    .instruction-text {
+      text-align: left;
+    }
+    
+    .instruction-title {
+      color: #fbbf24;
+      font-weight: bold;
+      margin-bottom: 5px;
+      font-size: 16px;
+    }
+    
+    .instruction-subtitle {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    
+    /* URL BOX */
+    .url-box {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 30px;
+      padding: 15px 20px;
+      margin-bottom: 25px;
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .url-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.1), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    .url-label {
+      color: #94a3b8;
+      font-size: 12px;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .url-value {
+      color: #fbbf24;
+      font-size: 18px;
+      font-weight: bold;
+      word-break: break-all;
+      font-family: monospace;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px 15px;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    
+    /* DEVICE DETAILS */
+    .device-details {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    
+    .detail-label {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    
+    .detail-value {
+      color: #fbbf24;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    
+    .detail-value.blocked {
+      color: #ef4444;
+    }
+    
+    /* QR SECTION */
+    .qr-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      border: 1px dashed rgba(251, 191, 36, 0.3);
+    }
+    
+    .qr-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+    
+    .qr-icon {
+      font-size: 40px;
+    }
+    
+    .qr-text {
+      text-align: left;
+    }
+    
+    .qr-title {
+      color: #fbbf24;
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 3px;
+    }
+    
+    .qr-subtitle {
+      color: #64748b;
+      font-size: 11px;
+    }
+    
+    /* FOOTER */
+    .footer-note {
+      margin-top: 20px;
+      color: #64748b;
+      font-size: 11px;
+      font-style: italic;
+    }
+    
+    /* MOBILE RESPONSIVE */
+    @media (max-width: 480px) {
+      .blocker-card {
+        padding: 30px 20px;
+      }
+      
+      .icon-container {
+        font-size: 60px;
+      }
+      
+      h1 {
+        font-size: 28px;
+      }
+      
+      .message {
+        font-size: 14px;
+      }
+      
+      .arrow-icon {
+        font-size: 40px;
+      }
+      
+      .instruction-title {
+        font-size: 14px;
+      }
+      
+      .instruction-subtitle {
+        font-size: 12px;
+      }
+      
+      .url-value {
+        font-size: 16px;
+      }
+    }
+  </style>
+  <script>
+    // IMMEDIATE BLOCK - No bypass
+    (function() {
+      // Advanced mobile detection
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      
+      // Mobile patterns
+      const mobilePatterns = [
+        /Android/i,
+        /webOS/i,
+        /iPhone/i,
+        /iPad/i,
+        /iPod/i,
+        /BlackBerry/i,
+        /IEMobile/i,
+        /Opera Mini/i,
+        /Windows Phone/i,
+        /Mobile/i,
+        /mobile/i,
+        /CriOS/i,
+        /FxiOS/i,
+        /EdgiOS/i
+      ];
+      
+      const hasMobileUA = mobilePatterns.some(pattern => pattern.test(userAgent));
+      const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      const isMobileScreen = screenWidth <= 428 && screenHeight <= 926;
+      const hasMultiTouch = navigator.maxTouchPoints > 1;
+      const platform = navigator.platform || '';
+      const isDesktopPlatform = platform.includes('Win') || platform.includes('Mac') || platform.includes('Linux');
+      
+      // Scoring
+      let mobileScore = 0;
+      let desktopScore = 0;
+      
+      if (hasMobileUA) mobileScore += 30;
+      if (hasTouch) mobileScore += 20;
+      if (isMobileScreen) mobileScore += 15;
+      if (hasMultiTouch) mobileScore += 10;
+      
+      if (!hasTouch) desktopScore += 20;
+      if (screenWidth > 1024) desktopScore += 15;
+      if (isDesktopPlatform) desktopScore += 15;
+      if (!hasMobileUA) desktopScore += 10;
+      
+      const isMobile = mobileScore > desktopScore && mobileScore > 40;
+      
+      // If not mobile, BLOCK IMMEDIATELY with nice design
+      if (!isMobile) {
+        // Clear the body
+        document.body.innerHTML = '';
+        
+        // Apply body styles
+        document.body.style.background = 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)';
+        document.body.style.minHeight = '100vh';
+        document.body.style.display = 'flex';
+        document.body.style.alignItems = 'center';
+        document.body.style.justifyContent = 'center';
+        document.body.style.padding = '20px';
+        document.body.style.position = 'relative';
+        document.body.style.overflow = 'hidden';
+        document.body.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif";
+        
+        // Create the card
+        const card = document.createElement('div');
+        card.className = 'blocker-card';
+        
+        // Add content
+        card.innerHTML = `
+          <div class="icon-container">📱</div>
+          
+          <h1>Mobile Only</h1>
+          
+          <p class="message">
+            WinTap Games is exclusively designed for mobile devices.
+            Please access this site from your smartphone.
+          </p>
+          
+          <div class="instruction-box">
+            <div class="instruction-content">
+              <span class="arrow-icon">📲</span>
+              <div class="instruction-text">
+                <div class="instruction-title">Open on your phone</div>
+                <div class="instruction-subtitle">
+                  Scan QR or enter URL on mobile
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="url-box">
+            <div class="url-label">Visit on mobile</div>
+            <div class="url-value">${window.location.host}</div>
+          </div>
+          
+          <div class="device-details">
+            <div class="detail-row">
+              <span class="detail-label">Detected:</span>
+              <span class="detail-value">Desktop / Laptop</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Screen:</span>
+              <span class="detail-value">${window.innerWidth} x ${window.innerHeight}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Status:</span>
+              <span class="detail-value blocked">ACCESS BLOCKED</span>
+            </div>
+          </div>
+          
+          <div class="qr-section">
+            <div class="qr-placeholder">
+              <span class="qr-icon">📱</span>
+              <div class="qr-text">
+                <div class="qr-title">Mobile access only</div>
+                <div class="qr-subtitle">This site requires a touchscreen device</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="footer-note">
+            ⚡ Fast gameplay • Real money prizes • Instant withdrawals
+          </div>
+        `;
+        
+        // Append card to body
+        document.body.appendChild(card);
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+</body>
 </html>

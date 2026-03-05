@@ -1,0 +1,219 @@
+/* src/components/MobileOnly.css */
+.mobile-only-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.mobile-only-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 2px solid #fbbf24;
+  border-radius: 30px;
+  padding: 40px 30px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  color: white;
+  animation: slideUp 0.5s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.phone-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: float 3s infinite;
+}
+
+.mobile-only-card h1 {
+  color: #fbbf24;
+  font-size: 32px;
+  margin-bottom: 15px;
+  font-weight: bold;
+}
+
+.message {
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 25px;
+}
+
+.instruction-box {
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 25px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.instruction-content {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  justify-content: center;
+}
+
+.arrow-icon {
+  font-size: 48px;
+  animation: pulse 2s infinite;
+}
+
+.instruction-text {
+  text-align: left;
+}
+
+.instruction-title {
+  color: #fbbf24;
+  font-weight: bold;
+  margin-bottom: 5px;
+  font-size: 16px;
+}
+
+.instruction-subtitle {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.url-box {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 30px;
+  padding: 12px 20px;
+  margin-bottom: 25px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  word-break: break-all;
+}
+
+.url-label {
+  color: #94a3b8;
+  font-size: 14px;
+}
+/* Add to MobileOnly.css */
+.detection-warning {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #ef4444;
+}
+
+.blocked {
+  color: #ef4444 !important;
+}
+
+.detail-row .blocked {
+  color: #ef4444;
+  font-weight: bold;
+}
+.url-value {
+  color: #fbbf24;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.device-details {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row span {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.detail-row strong {
+  color: #fbbf24;
+  font-size: 14px;
+}
+
+.note {
+  color: #64748b;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .mobile-only-card {
+    padding: 30px 20px;
+  }
+  
+  .phone-icon {
+    font-size: 60px;
+  }
+  
+  .mobile-only-card h1 {
+    font-size: 28px;
+  }
+  
+  .message {
+    font-size: 14px;
+  }
+  
+  .arrow-icon {
+    font-size: 40px;
+  }
+  
+  .instruction-title {
+    font-size: 14px;
+  }
+  
+  .instruction-subtitle {
+    font-size: 12px;
+  }
+}
