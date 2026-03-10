@@ -1,15 +1,36 @@
 /* Home.css */
+/* Home.css - Fixed version */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto; /* Changed from hidden to auto */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  position: relative; /* Changed from fixed */
+  overscroll-behavior-y: none; /* Prevent pull-to-refresh but allow scroll */
+}
+#root {
+  min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible;
+  position: relative;
+}
 
-body {
-  background: #0f172a;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  color: #fff;
+/* Fix for the main content areas */
+.home, .dashboard, .games-page, .wallet-page, .profile-page, .leaderboard-page {
+  height: auto;
+  min-height: 100%;
+  overflow-y: visible;
+  position: relative;
 }
 
 /* Navbar - Same style as dashboard header */
@@ -35,7 +56,226 @@ body {
 .brand-icon {
   font-size: 24px;
 }
+/* Home.css - Add these fixes */
 
+.home {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  min-height: 100vh;
+  min-height: calc(var(--vh, 1vh) * 100);
+  padding-bottom: 70px; /* Space for bottom nav */
+  position: relative;
+  background: #0f172a;
+}
+
+/* Fix for bottom nav covering content */
+.home-main {
+  width: 100%;
+  padding: 0 16px 80px 16px; /* Extra bottom padding */
+}
+
+/* Fix hero section sizing */
+.hero {
+  width: 100%;
+  padding: 60px 16px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  text-align: center;
+  min-height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-content {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  font-size: clamp(28px, 8vw, 40px); /* Responsive font */
+  margin-bottom: 15px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.hero p {
+  font-size: clamp(14px, 4vw, 16px);
+  margin-bottom: 25px;
+  padding: 0 10px;
+}
+
+.hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  width: 100%;
+}
+
+.stat {
+  flex: 1 1 auto;
+  min-width: 100px;
+  text-align: center;
+}
+
+/* Fix games grid */
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  padding: 0 16px;
+  margin: 0 auto;
+  max-width: 1200px;
+}
+
+.game-card {
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+/* Fix steps container */
+.steps-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  width: 100%;
+  padding: 0 16px;
+  margin: 0 auto;
+  max-width: 1000px;
+}
+
+.step {
+  width: 100%;
+  text-align: center;
+}
+
+/* Fix winners section */
+.winners-list {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.winner-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* Fix footer */
+.footer {
+  width: 100%;
+  padding: 40px 16px 20px;
+  background: #0a0f1a;
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 30px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto 30px;
+}
+
+.footer-section {
+  width: 100%;
+  text-align: left;
+}
+
+.footer-section a {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Fix bottom navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 215, 0, 0.2);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+  z-index: 1000;
+  width: 100%;
+  transform: translateZ(0); /* Fix flashing on iOS */
+  -webkit-transform: translateZ(0);
+}
+
+/* Mobile specific fixes */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 32px;
+  }
+  
+  .games-grid {
+    grid-template-columns: 1fr;
+    padding: 0 16px;
+  }
+  
+  .steps-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .footer-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  
+  .footer-section {
+    text-align: center;
+  }
+  
+  .footer-section a {
+    text-align: center;
+  }
+  
+  .social-links {
+    justify-content: center;
+  }
+}
+
+/* Prevent any overflow */
+img, video, iframe, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Fix for 100vw causing horizontal scroll */
+body {
+  overflow-x: hidden;
+  width: 100%;
+  position: relative;
+}
+
+/* Ensure no elements cause horizontal scroll */
+* {
+  max-width: 100%;
+  box-sizing: border-box;
+}
 .brand-name {
   font-size: 18px;
   font-weight: bold;

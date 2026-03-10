@@ -72,29 +72,37 @@ function App() {
   if (loading) {
     return <div className="loading-screen">Loading WinTap Games...</div>;
   }
+  
 
   return (
-    <MobileOnly>  {/* This will block desktop users */}
+
+   
       <Router>
         <div className="App">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Home user={user} />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+          <div className="app-wrapper" style={{
+            minHeight: 'var(--window-height, 100vh)',
+            width: '100%',
+            overflowX: 'hidden',
+            position: 'relative'
+          }}>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Home user={user} />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-            {/* Protected Routes */}
-            <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
-            <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
-            <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
-            <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
-            <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
-            <Route path="/leaderboard" element={<Leaderboard user={user} />} />
-          </Routes>
-
+              {/* Protected Routes */}
+              <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
+              <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
+              <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
+              <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
+              <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
+              <Route path="/leaderboard" element={<Leaderboard user={user} />} />
+            </Routes>
+          </div>
         </div>
       </Router>
-    </MobileOnly>
+
   );
 }
 
