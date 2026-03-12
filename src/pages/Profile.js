@@ -18,7 +18,9 @@ function Profile({ user }) {
   
   // Form states
   const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
+  const [usernameError, setUsernameError] = useState('');
 
   // Navigation items for bottom bar
   const navItems = [
@@ -29,7 +31,34 @@ function Profile({ user }) {
     { path: '/leaderboard', icon: '🏆', label: 'Rank' }
   ];
 
-  // Load user data - SIMPLIFIED
+  // Check if username exists
+  const checkUsernameExists = async (usernameToCheck, currentUserId) => {
+    try {
+      const usernameRef = ref(database, `lookups/byUsername/${usernameToCheck.toLowerCase()}`);
+      const snapshot = await get(usernameRef);
+      
+      // If username exists and it's not the current user's, it's taken
+      if (snapshot.exists()) {
+        const existingUserId = snapshot.val();
+        return existingUserId !== currentUserId;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking username:', error);
+      return false;
+    }
+  };
+
+  // Validate username
+  const validateUsername = (username) => {
+    if (!username) return 'Username is required';
+    if (username.length < 3) return 'Username must be at least 3 characters';
+    if (username.length > 20) return 'Username must be less than 20 characters';
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return 'Username can only contain letters, numbers, and underscores';
+    return '';
+  };
+
+  // Load user data
   useEffect(() => {
     if (!user) {
       console.log('❌ No user, redirecting to login');
@@ -41,109 +70,165 @@ function Profile({ user }) {
     loadUserData();
   }, [user]);
 
-  const loadUserData = async () => {
-    setLoading(true);
-    setError('');
+ const loadUserData = async () => {
+  setLoading(true);
+  setError('');
+  
+  try {
+    console.log('📂 Loading profile for:', user.uid);
     
-    try {
-      console.log('📂 Loading profile for:', user.uid);
-      
-      // Try to read profile
-      const profileRef = ref(database, `user_profiles/${user.uid}`);
-      const profileSnapshot = await get(profileRef);
-      
-      if (profileSnapshot.exists()) {
-        console.log('✅ Profile found:', profileSnapshot.val());
-        const profileData = profileSnapshot.val();
-        setProfile(profileData);
-        setDisplayName(profileData.displayName || user.displayName || 'Player');
-        setBio(profileData.bio || '');
-      } else {
-        console.log('🆕 No profile found, creating default...');
-        // Create default profile
-        const defaultProfile = {
-          displayName: user.displayName || 'Player',
-          bio: 'I love playing games and winning real money! 🎮',
-          rank: 'Bronze',
-          level: 1,
-          experience: 0,
-          joinDate: new Date().toISOString(),
-          totalGames: 0,
-          totalWins: 0,
-          totalLosses: 0,
-          winStreak: 0
-        };
-        
-        await set(profileRef, defaultProfile);
-        console.log('✅ Default profile created');
-        setProfile(defaultProfile);
-        setDisplayName(defaultProfile.displayName);
-        setBio(defaultProfile.bio);
-      }
-      
-      // Load wallet
-      const walletRef = ref(database, `wallets/${user.uid}`);
-      const walletSnapshot = await get(walletRef);
-      
-      if (walletSnapshot.exists()) {
-        console.log('💰 Wallet found:', walletSnapshot.val());
-        setWallet(walletSnapshot.val());
-      } else {
-        console.log('🆕 No wallet found, creating default...');
-        const defaultWallet = {
-          balance: 0,
-          totalWon: 0,
-          totalLost: 0,
-          currency: 'USD'
-        };
-        await set(walletRef, defaultWallet);
-        setWallet(defaultWallet);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error loading profile:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      
-      if (error.code === 'PERMISSION_DENIED') {
-        setError('Database permission denied. Please check Firebase Realtime Database rules.');
-      } else {
-        setError('Failed to load profile: ' + error.message);
-      }
-    } finally {
-      setLoading(false);
+    // Try to read profile from user_profiles
+    const profileRef = ref(database, `user_profiles/${user.uid}`);
+    const profileSnapshot = await get(profileRef);
+    
+    // ALSO get the public user data which contains the username
+    const userPublicRef = ref(database, `users/${user.uid}/public`);
+    const userPublicSnapshot = await get(userPublicRef);
+    
+    // Get username from the public path
+    let userPublicData = {};
+    if (userPublicSnapshot.exists()) {
+      userPublicData = userPublicSnapshot.val();
+      console.log('✅ Public user data found:', userPublicData);
     }
-  };
+    
+    if (profileSnapshot.exists()) {
+      console.log('✅ Profile found:', profileSnapshot.val());
+      const profileData = profileSnapshot.val();
+      setProfile(profileData);
+      setDisplayName(profileData.displayName || user.displayName || 'Player');
+      // Get username from public data, fallback to displayName
+      setUsername(userPublicData.username || profileData.displayName || user.displayName || 'Player');
+      setBio(profileData.bio || '');
+    } else {
+      console.log('🆕 No profile found, creating default...');
+      // Create default profile
+      const defaultUsername = userPublicData.username || user.displayName?.toLowerCase().replace(/\s+/g, '_') || 'player';
+      
+      const defaultProfile = {
+        displayName: user.displayName || 'Player',
+        username: defaultUsername,
+        bio: 'I love playing games and winning real money! 🎮',
+        rank: 'Bronze',
+        level: 1,
+        experience: 0,
+        joinDate: new Date().toISOString(),
+        totalGames: 0,
+        totalWins: 0,
+        totalLosses: 0,
+        winStreak: 0
+      };
+      
+      await set(profileRef, defaultProfile);
+      console.log('✅ Default profile created');
+      setProfile(defaultProfile);
+      setDisplayName(defaultProfile.displayName);
+      setUsername(defaultProfile.username);
+      setBio(defaultProfile.bio);
+    }
+    
+    // Load wallet (rest of your code stays the same)
+    const walletRef = ref(database, `wallets/${user.uid}`);
+    const walletSnapshot = await get(walletRef);
+    
+    if (walletSnapshot.exists()) {
+      console.log('💰 Wallet found:', walletSnapshot.val());
+      setWallet(walletSnapshot.val());
+    } else {
+      console.log('🆕 No wallet found, creating default...');
+      const defaultWallet = {
+        balance: 0,
+        totalWon: 0,
+        totalLost: 0,
+        currency: 'USD'
+      };
+      await set(walletRef, defaultWallet);
+      setWallet(defaultWallet);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading profile:', error);
+    
+    if (error.code === 'PERMISSION_DENIED') {
+      setError('Database permission denied. Please check Firebase Realtime Database rules.');
+    } else {
+      setError('Failed to load profile: ' + error.message);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handleProfileUpdate = async (e) => {
-    e.preventDefault();
+const handleProfileUpdate = async (e) => {
+  e.preventDefault();
+  
+  // Validate username if it changed
+  if (username !== profile?.username) {
+    const validationError = validateUsername(username);
+    if (validationError) {
+      setUsernameError(validationError);
+      return;
+    }
+
+    // Check if username is taken
     setSaving(true);
-    setError('');
-    
-    try {
-      const profileRef = ref(database, `user_profiles/${user.uid}`);
-      await update(profileRef, {
-        displayName,
-        bio,
-        lastUpdated: new Date().toISOString()
-      });
+    const isTaken = await checkUsernameExists(username, user.uid);
+    setSaving(false);
 
-      // Update Firebase Auth display name
-      if (user.displayName !== displayName) {
-        await updateProfile(user, { displayName });
-      }
-
-      // Update local state
-      setProfile(prev => ({ ...prev, displayName, bio }));
-      setEditMode(false);
-      
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      setError('Failed to update profile: ' + error.message);
-    } finally {
-      setSaving(false);
+    if (isTaken) {
+      setUsernameError('Username is already taken');
+      return;
     }
-  };
+  }
+
+  setSaving(true);
+  setError('');
+  setUsernameError('');
+  
+  try {
+    // Update user_profiles (add username field here too!)
+    const profileRef = ref(database, `user_profiles/${user.uid}`);
+    await update(profileRef, {
+      displayName,
+      username, // Add this line to save username in user_profiles too
+      bio,
+      lastUpdated: new Date().toISOString()
+    });
+
+    // Update main users path
+    const userRef = ref(database, `users/${user.uid}/public`);
+    await update(userRef, {
+      displayName,
+      username: username.toLowerCase(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // If username changed, update lookups
+    if (username !== profile?.username) {
+      // Delete old lookup
+      if (profile?.username) {
+        await set(ref(database, `lookups/byUsername/${profile.username.toLowerCase()}`), null);
+      }
+      // Create new lookup
+      await set(ref(database, `lookups/byUsername/${username.toLowerCase()}`), user.uid);
+    }
+
+    // Update Firebase Auth display name
+    if (user.displayName !== displayName) {
+      await updateProfile(user, { displayName });
+    }
+
+    // Update local state
+    setProfile(prev => ({ ...prev, displayName, username, bio }));
+    setEditMode(false);
+    
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    setError('Failed to update profile: ' + error.message);
+  } finally {
+    setSaving(false);
+  }
+};
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -218,6 +303,10 @@ function Profile({ user }) {
             </span>
           </div>
           <h2>{displayName || user?.displayName || 'Player'}</h2>
+          <div className="profile-username">
+            <span className="username-label">@</span>
+            <span className="username-value">{username || profile?.username || 'username'}</span>
+          </div>
           <div className="profile-rank">
             <span className="rank-icon">
               {profile?.rank === 'Bronze' && '🥉'}
@@ -252,10 +341,6 @@ function Profile({ user }) {
               <span>Total Won</span>
               <span className="won">{formatCurrency(wallet?.totalWon || 0)}</span>
             </div>
-            <div className="stat-row">
-              <span>Total Lost</span>
-              <span className="lost">{formatCurrency(wallet?.totalLost || 0)}</span>
-            </div>
           </div>
           <Link to="/wallet" className="manage-wallet-btn">
             Manage Wallet →
@@ -277,6 +362,10 @@ function Profile({ user }) {
             // VIEW MODE
             <div className="profile-view">
               <div className="info-group">
+                <label>Username</label>
+                <p>@{profile?.username || 'Not set'}</p>
+              </div>
+              <div className="info-group">
                 <label>Display Name</label>
                 <p>{profile?.displayName || user?.displayName || 'Not set'}</p>
               </div>
@@ -292,6 +381,26 @@ function Profile({ user }) {
           ) : (
             // EDIT MODE
             <form onSubmit={handleProfileUpdate} className="profile-edit-form">
+              <div className="form-group">
+                <label>Username</label>
+                <div className="username-input-wrapper">
+                  <span className="username-prefix">@</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                      setUsernameError('');
+                    }}
+                    placeholder="username"
+                    className="username-input"
+                    required
+                  />
+                </div>
+                {usernameError && <small className="error-text">{usernameError}</small>}
+                <small className="hint">Only letters, numbers, and underscores. 3-20 characters.</small>
+              </div>
+
               <div className="form-group">
                 <label>Display Name</label>
                 <input
@@ -323,7 +432,9 @@ function Profile({ user }) {
                   onClick={() => {
                     setEditMode(false);
                     setDisplayName(profile?.displayName || user?.displayName || 'Player');
+                    setUsername(profile?.username || profile?.displayName || user?.displayName || 'Player');
                     setBio(profile?.bio || '');
+                    setUsernameError('');
                   }}
                 >
                   Cancel

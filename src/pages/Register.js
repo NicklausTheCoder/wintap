@@ -1,13 +1,21 @@
-// Register.tsx
-import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, database } from '../firebase';
-import { ref, set, get, update } from 'firebase/database';
+// Register.js
+import React, { useState, useEffect } from 'react';
+import { 
+  createUserWithEmailAndPassword, 
+  updateProfile,
+  signInWithPopup,
+  GoogleAuthProvider
+} from 'firebase/auth';
+import { auth } from '../firebase';
+import { 
+  generateUniqueUsername,
+  checkUsernameExists,
+  createUserInDatabase,
+  storeUserSession,
+  checkUserExists
+} from '../utils/registrationHelper';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import './Register.css';
-
-// Game types - ONLY your actual games
-type GameId = 'flappy-bird' | 'space-shooter' | 'ball-crush';
 
 function Register() {
   const [email, setEmail] = useState('');
@@ -17,11 +25,22 @@ function Register() {
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Navigation items for bottom bar (logged out users)
+  // Check for referral code in URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      setReferralCode(ref);
+      console.log('📨 Referral code detected:', ref);
+    }
+  }, [location]);
+
+  // Navigation items for bottom bar
   const navItems = [
     { path: '/', icon: '🏠', label: 'Home' },
     { path: '/games', icon: '🎮', label: 'Games' },
@@ -30,6 +49,63 @@ function Register() {
     { path: '/contact', icon: '📞', label: 'Contact' }
   ];
 
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError('');
+
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      console.log('✅ Google sign-in successful:', user.uid);
+
+      // Check if user already exists
+      const existingUser = await checkUserExists(user.uid);
+
+      if (existingUser) {
+        console.log('👋 Existing user, logging in...');
+        
+        const existingUsername = existingUser.public?.username;
+        storeUserSession(existingUsername);
+        navigate('/dashboard');
+        return;
+      }
+
+      // New user - generate unique username
+      const generatedUsername = await generateUniqueUsername();
+      console.log('🎲 Generated username:', generatedUsername);
+
+      // Create user in database
+      await createUserInDatabase(
+        user.uid, 
+        user.email || '', 
+        generatedUsername,
+        referralCode,
+        user.photoURL
+      );
+
+      // Store session
+      storeUserSession(generatedUsername);
+      navigate('/dashboard');
+
+    } catch (error) {
+      console.error('❌ Google sign-in failed:', error);
+      
+      if (error.code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled in Firebase Console');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in popup was closed');
+      } else {
+        setError('Failed to sign in with Google');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Handle email registration
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -45,242 +121,31 @@ function Register() {
       return setError('Username is required');
     }
 
+    const usernameExists = await checkUsernameExists(username);
+    if (usernameExists) {
+      return setError('Username already taken');
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      // 1. CREATE AUTHENTICATION
-      console.log('📝 Creating user account...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const userId = userCredential.user.uid;
-      console.log('✅ User created:', userId);
 
-      // 2. SET DISPLAY NAME - Use username as display name
       await updateProfile(userCredential.user, {
         displayName: username
       });
 
-      // 3. WRITE TO DATABASE (Multi-game structure)
-      try {
-        console.log('📝 Writing to database with multi-game structure...');
-        const now = new Date().toISOString();
-
-        // Create user document with ONLY your actual games
-        await set(ref(database, `users/${userId}`), {
-          // Public profile (visible to everyone)
-          public: {
-            uid: userId,
-            username: username.toLowerCase(), // Store lowercase for searching
-            displayName: username, // Use username as display name
-            avatar: 'default',
-            globalRank: 'Rookie',
-            globalLevel: 1,
-            createdAt: now,
-            isOnline: true
-          },
-
-          // Private data (user's own data)
-          private: {
-            email: email,
-            lastLogin: now,
-            isActive: true,
-            role: 'player',
-            referredBy: referralCode || null
-          },
-
-          // Wallet (coins/currency) - Note: This is nested under users, not at root
-          wallet: {
-            balance: 10.00, // Welcome bonus
-            totalDeposited: 0,
-            totalWithdrawn: 0,
-            totalWon: 0,
-            totalLost: 0,
-            totalBonus: 10.00,
-            currency: 'USD',
-            lastUpdated: now
-          },
-
-          // Metadata (user statistics)
-          metadata: {
-            createdAt: now,
-            updatedAt: now,
-            lastGamePlayed: null,
-            totalPlayTime: 0,
-            favoriteGame: null
-          },
-
-          // Game-specific stats - ONLY your 3 games
-          games: {
-            'flappy-bird': {
-              highScore: 0,
-              totalGames: 0,
-              totalWins: 0,
-              totalLosses: 0,
-              winStreak: 0,
-              bestWinStreak: 0,
-              experience: 0,
-              level: 1,
-              rank: 'Rookie',
-              achievements: [],
-              lastPlayed: now,
-              averageScore: 0,
-              totalScore: 0,
-              gamesWon: 0,
-              gamesLost: 0
-            },
-            'space-shooter': {
-              highScore: 0,
-              totalGames: 0,
-              totalWins: 0,
-              totalLosses: 0,
-              winStreak: 0,
-              bestWinStreak: 0,
-              experience: 0,
-              level: 1,
-              rank: 'Rookie',
-              achievements: [],
-              lastPlayed: now,
-              averageScore: 0,
-              totalScore: 0,
-              gamesWon: 0,
-              gamesLost: 0
-            },
-            'ball-crush': {
-              highScore: 0,
-              totalGames: 0,
-              totalWins: 0,
-              totalLosses: 0,
-              winStreak: 0,
-              bestWinStreak: 0,
-              experience: 0,
-              level: 1,
-              rank: 'Rookie',
-              achievements: [],
-              lastPlayed: now,
-              averageScore: 0,
-              totalScore: 0,
-              gamesWon: 0,
-              gamesLost: 0
-            }
-          }
-        });
-
-        console.log('✅ User document created with your 3 games');
-
-        // Create lookup indexes for searching
-        await set(ref(database, `lookups/byUsername/${username.toLowerCase()}`), userId);
-
-        console.log('✅ Lookup indexes created');
-
-        // Create welcome transaction
-        const transactionId = `txn_${Date.now()}`;
-        await set(ref(database, `transactions/${userId}/${transactionId}`), {
-          type: 'bonus',
-          amount: 10.00,
-          balance: 10.00,
-          description: 'Welcome bonus',
-          status: 'completed',
-          timestamp: now
-        });
-
-        console.log('✅ Transaction created');
-
-        // Handle referral if provided
-        if (referralCode) {
-          try {
-            // Get referrer's data
-            const referrerSnapshot = await get(ref(database, `lookups/byUsername/${referralCode.toLowerCase()}`));
-
-            if (referrerSnapshot.exists()) {
-              const referrerId = referrerSnapshot.val();
-
-              // Get referrer's current wallet
-              const walletRef = ref(database, `users/${referrerId}/wallet`);
-              const walletSnapshot = await get(walletRef);
-
-              if (walletSnapshot.exists()) {
-                const wallet = walletSnapshot.val();
-                const newBalance = wallet.balance + 5.00;
-
-                // Update referrer's wallet
-                await update(ref(database, `users/${referrerId}/wallet`), {
-                  balance: newBalance,
-                  totalBonus: wallet.totalBonus + 5.00,
-                  lastUpdated: now
-                });
-
-                // Add referral record
-                await set(ref(database, `users/${referrerId}/referrals/${userId}`), {
-                  username: username,
-                  joinedAt: now,
-                  bonus: 5.00
-                });
-
-                // Add transaction for referrer
-                const referrerTxnId = `txn_${Date.now()}_ref`;
-                await set(ref(database, `transactions/${referrerId}/${referrerTxnId}`), {
-                  type: 'bonus',
-                  amount: 5.00,
-                  balance: newBalance,
-                  description: `Referral bonus for ${username}`,
-                  status: 'completed',
-                  timestamp: now
-                });
-
-                console.log('✅ Referral bonus applied');
-              }
-            }
-          } catch (refError) {
-            console.error('❌ Referral error:', refError);
-            // Don't fail registration if referral fails
-          }
-        }
-
-        console.log('🎉 All database writes successful!');
-
-      } catch (dbError) {
-        console.error('❌ Database write failed:', dbError);
-
-        if (dbError.code === 'PERMISSION_DENIED') {
-          setError('Database permission denied. Please check Firebase Realtime Database rules.');
-        } else {
-          setError('Failed to save user data: ' + dbError.message);
-        }
-        setLoading(false);
-        return;
-      }
-
-      // 4. Store session data for game login
-      const sessionData = {
-        username: username,
-        displayName: username,
-        loginTime: Date.now(),
-        sessionId: Math.random().toString(36).substring(2, 15),
-        rememberMe: true
-      };
-
-      // Store in sessionStorage for the game to use
-      sessionStorage.setItem('gameUser', JSON.stringify(sessionData));
-      localStorage.setItem('gameUser', JSON.stringify(sessionData));
-
-      // 5. SUCCESS - REDIRECT TO DASHBOARD
+      await createUserInDatabase(userId, email, username, referralCode);
+      storeUserSession(username);
       navigate('/dashboard');
 
-    } catch (authError) {
-      console.error('❌ Authentication failed:', authError);
-
-      switch (authError.code) {
-        case 'auth/email-already-in-use':
-          setError('Email is already registered');
-          break;
-        case 'auth/invalid-email':
-          setError('Invalid email address');
-          break;
-        case 'auth/weak-password':
-          setError('Password is too weak');
-          break;
-        default:
-          setError('Failed to register: ' + authError.message);
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') {
+        setError('Email is already registered');
+      } else {
+        setError('Registration failed');
       }
     } finally {
       setLoading(false);
@@ -295,14 +160,23 @@ function Register() {
           <h1>🎮 WinTap Games</h1>
           <h2>Create Account</h2>
           <p className="auth-subtitle">Get $10 Welcome Bonus!</p>
-          <p className="game-list">🎯 Flappy Bird • Space Shooter • Ball Crush</p>
         </div>
 
-        {error && (
-          <div className="error-message">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
+        {error && <div className="error-message">{error}</div>}
+
+        {/* Google Button - Clean and Simple */}
+        <button 
+          onClick={handleGoogleSignIn} 
+          disabled={googleLoading} 
+          className="google-button"
+        >
+          <span className="google-icon">G</span>
+          {googleLoading ? 'Signing in...' : 'Sign up with Google'}
+        </button>
+
+        <div className="auth-divider">
+          <span>Or sign up with email</span>
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -313,11 +187,7 @@ function Register() {
               onChange={(e) => setUsername(e.target.value)}
               required
               placeholder="Choose a username"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck="false"
             />
-            <small className="hint">This will be your display name</small>
           </div>
 
           <div className="form-group">
@@ -328,7 +198,6 @@ function Register() {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="Enter your email"
-              autoComplete="email"
             />
           </div>
 
@@ -339,7 +208,6 @@ function Register() {
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value)}
               placeholder="Enter referral code"
-              autoComplete="off"
             />
           </div>
 
@@ -351,7 +219,6 @@ function Register() {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="Minimum 6 characters"
-              autoComplete="new-password"
             />
           </div>
 
@@ -363,14 +230,13 @@ function Register() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               placeholder="Confirm your password"
-              autoComplete="new-password"
             />
           </div>
 
           <div className="form-terms">
             <label className="terms-checkbox">
               <input type="checkbox" required />
-              I agree to the <Link to="/terms">Terms</Link> & <Link to="/privacy">Privacy</Link>
+              I agree to the <Link to="/terms">Terms</Link>
             </label>
           </div>
 
@@ -386,13 +252,9 @@ function Register() {
         <p className="auth-link">
           <Link to="/login">Log in here</Link>
         </p>
-
-        <div className="preview-note">
-          <small>You'll be: <strong>{username || 'username'}</strong></small>
-        </div>
       </div>
 
-      {/* Bottom Navigation - Fixed at bottom like mobile app */}
+      {/* Bottom Navigation */}
       <nav className="bottom-nav">
         {navItems.map((item) => (
           <Link

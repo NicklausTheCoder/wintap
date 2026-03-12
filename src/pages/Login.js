@@ -1,7 +1,8 @@
 // Login.jsx
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth, database } from '../firebase';
+import { ref, get } from 'firebase/database';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import './Auth.css';
 
@@ -11,6 +12,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +26,44 @@ function Login() {
     { path: '/contact', icon: '📞', label: 'Contact' }
   ];
 
+  // Store user session after login
+  const storeUserSession = async (user) => {
+    try {
+      // Get user data from database
+      const userRef = ref(database, `users/${user.uid}`);
+      const snapshot = await get(userRef);
+      
+      let username = 'Player';
+      
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        username = userData.public?.username || userData.public?.displayName || user.email?.split('@')[0] || 'Player';
+      } else {
+        username = user.displayName || user.email?.split('@')[0] || 'Player';
+      }
+
+      // Store session data
+      const sessionData = {
+        uid: user.uid,
+        username: username,
+        displayName: username,
+        email: user.email,
+        loginTime: Date.now(),
+        sessionId: Math.random().toString(36).substring(2, 15)
+      };
+
+      sessionStorage.setItem('gameUser', JSON.stringify(sessionData));
+      localStorage.setItem('gameUser', JSON.stringify(sessionData));
+      
+      console.log('✅ Session stored for:', username);
+      return true;
+    } catch (error) {
+      console.error('❌ Error storing session:', error);
+      return false;
+    }
+  };
+
+  // Handle email/password login
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -31,9 +71,14 @@ function Login() {
 
     try {
       // Try to log in
-      await signInWithEmailAndPassword(auth, email, password);
-      // Success! Navigate to home page
-      navigate('/');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Store session
+      await storeUserSession(user);
+      
+      // Success! Navigate to dashboard
+      navigate('/dashboard');
     } catch (error) {
       // Show friendly error messages
       switch(error.code) {
@@ -46,6 +91,9 @@ function Login() {
         case 'auth/invalid-email':
           setError('Invalid email address');
           break;
+        case 'auth/user-disabled':
+          setError('This account has been disabled');
+          break;
         default:
           setError('Failed to login: ' + error.message);
       }
@@ -54,13 +102,65 @@ function Login() {
     }
   };
 
+  // Handle Google login
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError('');
+
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      console.log('✅ Google login successful:', user.uid);
+
+      // Store session
+      await storeUserSession(user);
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
+
+    } catch (error) {
+      console.error('❌ Google login failed:', error);
+      
+      if (error.code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled in Firebase Console');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in popup was closed');
+      } else if (error.code === 'auth/popup-blocked') {
+        setError('Pop-up blocked by browser. Please allow pop-ups.');
+      } else {
+        setError('Failed to login with Google');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>🎮 WinTap Games</h1>
-        <h2>Welcome Back!</h2>
+        <div className="auth-header">
+          <Link to="/" className="back-to-home">← Back</Link>
+          <h1>🎮 WinTap Games</h1>
+          <h2>Welcome Back!</h2>
+        </div>
         
         {error && <div className="error-message">{error}</div>}
+        
+        {/* Google Login Button */}
+        <button 
+          onClick={handleGoogleLogin} 
+          disabled={googleLoading} 
+          className="google-button"
+        >
+          <span className="google-icon">G</span>
+          {googleLoading ? 'Signing in...' : 'Continue with Google'}
+        </button>
+
+        <div className="auth-divider">
+          <span>or login with email</span>
+        </div>
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -105,11 +205,6 @@ function Login() {
           <span>or</span>
         </div>
         
-        <button className="google-auth-button">
-          <span className="google-icon">G</span>
-          Continue with Google
-        </button>
-        
         <p className="auth-link">
           Don't have an account? <Link to="/register">Sign up here</Link>
         </p>
@@ -119,7 +214,7 @@ function Login() {
         </p>
       </div>
 
-      {/* Bottom Navigation - Fixed at bottom like mobile app */}
+      {/* Bottom Navigation */}
       <nav className="bottom-nav">
         {navItems.map((item) => (
           <Link

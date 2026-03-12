@@ -4,12 +4,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { ref, onValue, off, set, get, update } from 'firebase/database';
 import { database } from '../firebase';
 import CryptoJS from 'crypto-js';
+import { getUserProfile, getWalletBalance } from './../utils/databaseHelpers'; // Import utility functions
 import './Games.css';
 
 function Games({ user }) {
   const location = useLocation();
   const [balance, setBalance] = useState(0);
   const [wallet, setWallet] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
   
@@ -18,8 +20,9 @@ function Games({ user }) {
   
   // Game URLs
   const GAME_URLS = {
-    'flappy-bird': 'http://localhost:8080/flappy-bird',
-    'space-shooter': 'http://localhost:8080/space-shooter'
+    'flappy-bird': 'https://flappy-games.onrender.com/flappy-bird',
+    'space-shooter': 'https://flappy-games.onrender.com/space-shooter',
+    'ball-crush': 'https://flappy-games.onrender.com/ball-crush'
   };
   
   // Navigation items for bottom bar
@@ -76,6 +79,8 @@ function Games({ user }) {
   // Filter games by category
   const filteredGames = activeCategory === 'all' 
     ? games 
+    : activeCategory === 'featured'
+    ? games.filter(game => game.featured)
     : games.filter(game => game.category === activeCategory);
 
   // Categories for tabs
@@ -104,27 +109,48 @@ function Games({ user }) {
     }
   };
 
-  // Load REAL wallet balance from database
+  // Load REAL wallet balance from database - FIXED PATH
   useEffect(() => {
     if (!user?.uid) return;
 
     console.log('🎮 Games page loading for user:', user.uid);
 
-    // Listen to wallet balance in real-time
-const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/' prefix
+    // Listen to wallet balance in real-time from the correct path: wallets/${userId}
+    const walletRef = ref(database, `wallets/${user.uid}`);
     
     const unsubscribe = onValue(walletRef, (snapshot) => {
       if (snapshot.exists()) {
         const walletData = snapshot.val();
-        console.log('💰 Wallet loaded:', walletData);
+        console.log('💰 Wallet loaded from wallets/:', walletData);
         setWallet(walletData);
         setBalance(walletData.balance || 0);
       } else {
-        console.log('⚠️ No wallet found');
-        setBalance(0);
+        // Fallback: check users/${userId}/wallet
+        console.log('⚠️ No wallet found in wallets/, checking users path...');
+        const userWalletRef = ref(database, `users/${user.uid}/wallet`);
+        get(userWalletRef).then((userWalletSnapshot) => {
+          if (userWalletSnapshot.exists()) {
+            const walletData = userWalletSnapshot.val();
+            console.log('💰 Wallet loaded from users/:', walletData);
+            setWallet(walletData);
+            setBalance(walletData.balance || 0);
+          } else {
+            console.log('⚠️ No wallet found anywhere');
+            setBalance(0);
+          }
+        });
       }
       setLoading(false);
     });
+
+    // Load user profile using utility function
+    const loadProfile = async () => {
+      const profileData = await getUserProfile(user.uid);
+      if (profileData) {
+        setProfile(profileData);
+      }
+    };
+    loadProfile();
 
     // Load real-time player counts from database
     loadPlayerCounts();
@@ -176,13 +202,27 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
     }
 
     try {
-      // Deduct entry fee from wallet
+      // Deduct entry fee from wallet - using correct path: wallets/${user.uid}
       const walletRef = ref(database, `wallets/${user.uid}`);
       const newBalance = balance - game.entryFee;
       
-      await update(walletRef, {
+      // Get current wallet data first
+      const walletSnapshot = await get(walletRef);
+      const currentWallet = walletSnapshot.exists() ? walletSnapshot.val() : {
+        balance: 0,
+        totalDeposited: 0,
+        totalWithdrawn: 0,
+        totalWon: 0,
+        totalLost: 0,
+        totalBonus: 0,
+        currency: 'USD'
+      };
+      
+      // Update with new balance
+      await set(walletRef, {
+        ...currentWallet,
         balance: newBalance,
-        totalLost: (wallet?.totalLost || 0) + game.entryFee,
+        totalLost: (currentWallet.totalLost || 0) + game.entryFee,
         lastUpdated: new Date().toISOString()
       });
 
@@ -199,13 +239,14 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
         timestamp: new Date().toISOString()
       });
 
-      // Update game stats
-      const gameStatsRef = ref(database, `game_stats/${user.uid}/${game.id}`);
+      // Update game stats in users/${uid}/games/${gameId}
+      const gameStatsRef = ref(database, `users/${user.uid}/games/${game.id}`);
       const statsSnapshot = await get(gameStatsRef);
       
       if (statsSnapshot.exists()) {
         const currentStats = statsSnapshot.val();
-        await update(gameStatsRef, {
+        await set(gameStatsRef, {
+          ...currentStats,
           totalGames: (currentStats.totalGames || 0) + 1,
           lastPlayed: new Date().toISOString(),
           totalSpent: (currentStats.totalSpent || 0) + game.entryFee
@@ -213,12 +254,17 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
       } else {
         await set(gameStatsRef, {
           totalGames: 1,
-          wins: 0,
-          losses: 0,
-          bestScore: 0,
+          totalWins: 0,
+          totalLosses: 0,
+          highScore: 0,
           totalEarnings: 0,
           totalSpent: game.entryFee,
-          lastPlayed: new Date().toISOString()
+          lastPlayed: new Date().toISOString(),
+          gamesWon: 0,
+          gamesLost: 0,
+          rank: 'Rookie',
+          level: 1,
+          experience: 0
         });
       }
 
@@ -240,7 +286,7 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
   // Redirect to game with encrypted user data
   const redirectToGame = async (game) => {
     try {
-      // Get user data from Firebase
+      // Get user data from Firebase - from users/${uid} path
       const userRef = ref(database, `users/${user.uid}`);
       const userSnapshot = await get(userRef);
       
@@ -284,7 +330,7 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
       
       // If no specific URL, use default with game param
       if (!gameUrl) {
-        gameUrl = `http://localhost:8080?game=${game.id}`;
+        gameUrl = `https://flappy-games.onrender.com?game=${game.id}`;
       }
       
       // Redirect with encrypted data
@@ -324,8 +370,8 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
       <header className="games-header">
         <h1>Play & Win</h1>
         <div className="user-badge">
-          <span className="user-avatar">{user?.displayName?.[0] || user?.email?.[0]}</span>
-          <span className="user-name">{user?.displayName || user?.email}</span>
+          <span className="user-avatar">{profile?.displayName?.[0] || user?.displayName?.[0] || user?.email?.[0]}</span>
+          <span className="user-name">{profile?.displayName || user?.displayName || user?.email}</span>
         </div>
       </header>
 
@@ -353,6 +399,15 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
             <div className="stat-icon">💔</div>
             <h4>Total Lost</h4>
             <p className="stat-value lost">{formatCurrency(wallet?.totalLost || 0)}</p>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">📊</div>
+            <h4>Win Rate</h4>
+            <p className="stat-value">
+              {wallet?.totalWon && wallet?.totalLost 
+                ? Math.round((wallet.totalWon / (wallet.totalWon + wallet.totalLost)) * 100) 
+                : 0}%
+            </p>
           </div>
         </div>
 
@@ -410,8 +465,11 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
                 <button 
                   className={`btn-play-game ${game.featured ? 'featured-game' : ''}`}
                   onClick={() => handlePlayGame(game)}
+                  disabled={balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id)}
                 >
-                  Play {game.title}
+                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id) 
+                    ? `Need ${formatCurrency(game.entryFee)}` 
+                    : `Play ${game.title}`}
                 </button>
 
                 <div className="game-footer">
@@ -460,7 +518,7 @@ const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/
             className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
           >
             <span className="nav-icon">{item.icon}</span>
-            <span>{item.label}</span>
+            <span className="nav-label">{item.label}</span>
           </Link>
         ))}
       </nav>

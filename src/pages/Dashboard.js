@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { ref, onValue, off, set, get } from 'firebase/database';
 import { auth, database } from '../firebase';
+import { getUserProfile, getWalletBalance } from './../utils/databaseHelpers';
 import './Dashboard.css';
 
 function Dashboard({ user }) {
@@ -15,7 +16,8 @@ function Dashboard({ user }) {
     totalWon: 0,
     totalDeposited: 0,
     totalWithdrawn: 0,
-    totalBonus: 0
+    totalBonus: 0,
+    totalLost: 0
   });
   const [recentGames, setRecentGames] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,8 @@ function Dashboard({ user }) {
     { path: '/games', icon: '🎮', label: 'Games' },
     { path: '/wallet', icon: '💰', label: 'Wallet' },
     { path: '/profile', icon: '👤', label: 'Profile' },
-    { path: '/leaderboard', icon: '🏆', label: 'Rank' }
+    { path: '/leaderboard', icon: '🏆', label: 'Rank' },
+    { path: '/logout', icon: '🚪', label: 'Logout', action: 'logout' }
   ];
 
   useEffect(() => {
@@ -35,79 +38,130 @@ function Dashboard({ user }) {
       return;
     }
 
-    // Load user data
-    const walletRef = ref(database, `users/${user.uid}/wallet`); // Note the 'users/' prefix
+    // Load user data from correct paths based on your database structure
+    const userRef = ref(database, `users/${user.uid}`);
     const profileRef = ref(database, `user_profiles/${user.uid}`);
-    const gamesRef = ref(database, `game_stats/${user.uid}`);
+    const walletRef = ref(database, `wallets/${user.uid}`); // Fixed: using wallets/ path
+    const gamesRef = ref(database, `users/${user.uid}/games`); // Games are under users/${uid}/games
 
+    // Listen to wallet changes
     const walletUnsubscribe = onValue(walletRef, (snapshot) => {
       if (snapshot.exists()) {
         setWallet(snapshot.val());
       } else {
-        initializeUserData();
+        // If wallet doesn't exist in wallets/, check users/${uid}/wallet as fallback
+        const userWalletRef = ref(database, `users/${user.uid}/wallet`);
+        get(userWalletRef).then((userWalletSnapshot) => {
+          if (userWalletSnapshot.exists()) {
+            setWallet(userWalletSnapshot.val());
+          }
+        });
       }
       setLoading(false);
     });
 
+    // Listen to profile changes
     const profileUnsubscribe = onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         setProfile(snapshot.val());
       }
     });
 
-    // Load recent games
+    // Load recent games from users/${uid}/games
     const gamesUnsubscribe = onValue(gamesRef, (snapshot) => {
       if (snapshot.exists()) {
         const games = [];
-        snapshot.forEach((child) => {
-          games.push({ id: child.key, ...child.val() });
+        snapshot.forEach((gameSnapshot) => {
+          const gameData = gameSnapshot.val();
+          games.push({ 
+            id: gameSnapshot.key, 
+            ...gameData,
+            // Add derived fields for display
+            totalEarnings: gameData.totalWins * 10 || 0, // Example calculation
+            bestScore: gameData.highScore || 0
+          });
         });
         setRecentGames(games);
       }
     });
 
     return () => {
-      off(walletRef);
-      off(profileRef);
-      off(gamesRef);
+      walletUnsubscribe();
+      profileUnsubscribe();
+      gamesUnsubscribe();
     };
-  }, [user?.uid]);
+  }, [user?.uid, navigate]);
 
   const initializeUserData = async () => {
     try {
       const userId = user.uid;
       
-      // Initialize wallet
+      // Check if wallet exists in wallets/
       const walletRef = ref(database, `wallets/${userId}`);
-      await set(walletRef, {
-        balance: 0,
-        totalDeposited: 0,
-        totalWithdrawn: 0,
-        totalWon: 0,
-        totalLost: 0,
-        totalBonus: 0,
-        currency: 'USD',
-        lastUpdated: new Date().toISOString(),
-        isActive: true
-      });
+      const walletSnapshot = await get(walletRef);
+      
+      if (!walletSnapshot.exists()) {
+        // Check if wallet exists in users/${userId}/wallet
+        const userWalletRef = ref(database, `users/${userId}/wallet`);
+        const userWalletSnapshot = await get(userWalletRef);
+        
+        if (userWalletSnapshot.exists()) {
+          // Migrate wallet data to wallets/ path
+          await set(walletRef, userWalletSnapshot.val());
+        } else {
+          // Create new wallet
+          await set(walletRef, {
+            balance: 0,
+            totalDeposited: 0,
+            totalWithdrawn: 0,
+            totalWon: 0,
+            totalLost: 0,
+            totalBonus: 0,
+            currency: 'USD',
+            lastUpdated: new Date().toISOString(),
+            isActive: true
+          });
+        }
+      }
 
-      // Initialize profile
+      // Check if profile exists
       const profileRef = ref(database, `user_profiles/${userId}`);
       const profileSnapshot = await get(profileRef);
       
       if (!profileSnapshot.exists()) {
-        await set(profileRef, {
-          displayName: user.displayName || user.email?.split('@')[0] || 'Player',
-          avatar: 'default',
-          rank: 'Bronze',
-          level: 1,
-          experience: 0,
-          joinDate: new Date().toISOString(),
-          totalGames: 0,
-          totalWins: 0,
-          totalLosses: 0,
-          winStreak: 0
-        });
+        // Check if profile data exists in users/${userId}/public
+        const userPublicRef = ref(database, `users/${userId}/public`);
+        const userPublicSnapshot = await get(userPublicRef);
+        
+        if (userPublicSnapshot.exists()) {
+          const publicData = userPublicSnapshot.val();
+          await set(profileRef, {
+            displayName: publicData.displayName || 'Player',
+            avatar: publicData.avatar || 'default',
+            rank: publicData.globalRank || 'Bronze',
+            level: publicData.globalLevel || 1,
+            experience: 0,
+            joinDate: publicData.createdAt || new Date().toISOString(),
+            totalGames: 0,
+            totalWins: 0,
+            totalLosses: 0,
+            winStreak: 0
+          });
+        } else {
+          // Create new profile
+          await set(profileRef, {
+            displayName: user.displayName || user.email?.split('@')[0] || 'Player',
+            avatar: 'default',
+            rank: 'Bronze',
+            level: 1,
+            experience: 0,
+            joinDate: new Date().toISOString(),
+            totalGames: 0,
+            totalWins: 0,
+            totalLosses: 0,
+            winStreak: 0
+          });
+        }
       }
     } catch (error) {
       console.error('Error initializing user data:', error);
@@ -118,6 +172,7 @@ function Dashboard({ user }) {
     try {
       await signOut(auth);
       localStorage.removeItem('gameUser');
+      sessionStorage.removeItem('gameUser');
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
@@ -136,6 +191,11 @@ function Dashboard({ user }) {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount || 0);
+  };
+
+  // Calculate total winnings from wallet
+  const getTotalWinnings = () => {
+    return (wallet?.totalWon || 0) - (wallet?.totalLost || 0);
   };
 
   if (!user) {
@@ -157,18 +217,10 @@ function Dashboard({ user }) {
       <header className="dashboard-header">
         <div className="welcome-section">
           <div className="welcome-text">
-            <h1>Welcome back, {profile?.displayName?.split(' ')[0] || 'Player'}! 👋</h1>
-            <span className="subtitle">Ready to play?</span>
+            <h1>Welcome back, {profile?.displayName?.split(' ')[0] || 'Player'}!</h1>
+        
           </div>
-          <div className="header-actions">
-            <button className="notification-btn">
-              <span className="notification-icon">🔔</span>
-              <span className="notification-badge">3</span>
-            </button>
-            <div className="avatar">
-              {profile?.displayName?.[0] || user?.email?.[0] || 'P'}
-            </div>
-          </div>
+         
         </div>
       </header>
 
@@ -187,8 +239,16 @@ function Dashboard({ user }) {
           <div className="stat-card">
             <div className="stat-icon">🏆</div>
             <div className="stat-details">
-              <h3>Winnings</h3>
+              <h3>Total Won</h3>
               <p className="stat-value">{formatCurrency(wallet?.totalWon || 0)}</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">📈</div>
+            <div className="stat-details">
+              <h3>Net Profit</h3>
+              <p className="stat-value">{formatCurrency(getTotalWinnings())}</p>
             </div>
           </div>
           
@@ -200,17 +260,6 @@ function Dashboard({ user }) {
               <div className="stat-sublabel">
                 <span className="wins">🏆 {profile?.totalWins || 0}</span>
                 <span className="losses">💔 {profile?.totalLosses || 0}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="stat-card">
-            <div className="stat-icon">⭐</div>
-            <div className="stat-details">
-              <h3>Win Rate</h3>
-              <p className="stat-value">{calculateWinRate()}%</p>
-              <div className="stat-sublabel">
-                <span className="streak">🔥 {profile?.winStreak || 0}</span>
               </div>
             </div>
           </div>
@@ -252,47 +301,52 @@ function Dashboard({ user }) {
               <span className="btn-icon">💰</span>
               Deposit
             </Link>
+            <Link to="/wallet" className="action-btn">
+              <span className="btn-icon">💸</span>
+              Withdraw
+            </Link>
           </div>
         </div>
 
         {/* Recent Games */}
         <div className="recent-games">
           <div className="section-header">
-            <h2>Recent Games</h2>
+            <h2>Game Stats</h2>
             <Link to="/games" className="view-all">View All →</Link>
           </div>
           
           {recentGames.length > 0 ? (
-            <table className="games-table">
-              <thead>
-                <tr>
-                  <th>Game</th>
-                  <th>Result</th>
-                  <th>Score</th>
-                  <th>Earnings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentGames.slice(0, 3).map((game) => (
-                  <tr key={game.id}>
-                    <td>
-                      {game.id === 'flappy-bird' && '🐦 Flappy Bird'}
-                      {game.id === 'space-shooter' && '🚀 Space Shooter'}
-                      {game.id === 'ball-crush' && '⚽ Ball Crush'}
-                    </td>
-                    <td>
-                      <span className={`result-badge ${game.wins > 0 ? 'won' : 'lost'}`}>
-                        {game.wins > 0 ? 'WON' : 'LOST'}
-                      </span>
-                    </td>
-                    <td>{game.bestScore || 0}</td>
-                    <td className={game.totalEarnings > 0 ? 'profit' : ''}>
-                      {game.totalEarnings > 0 ? `+$${game.totalEarnings}` : '$0'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="games-grid">
+              {recentGames.slice(0, 3).map((game) => (
+                <div key={game.id} className="game-stat-card">
+                  <div className="game-stat-header">
+                    <span className="game-icon">
+                      {game.id === 'flappy-bird' && '🐦'}
+                      {game.id === 'space-shooter' && '🚀'}
+                      {game.id === 'ball-crush' && '⚽'}
+                    </span>
+                    <h4>{game.id?.replace('-', ' ') || 'Game'}</h4>
+                  </div>
+                  <div className="game-stat-details">
+                    <div className="stat-row">
+                      <span>Played:</span>
+                      <span>{game.totalGames || 0}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>Wins:</span>
+                      <span className="wins">{game.totalWins || 0}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>High Score:</span>
+                      <span>{game.highScore || 0}</span>
+                    </div>
+                  </div>
+                  <Link to={`/games/${game.id}`} className="game-play-link">
+                    Play →
+                  </Link>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="no-games">
               <p>No games played yet</p>
@@ -304,55 +358,60 @@ function Dashboard({ user }) {
         </div>
 
         {/* Popular Games */}
-   {/* Popular Games */}
-<div className="popular-games">
-  <h2>Popular Games</h2>
-  <div className="games-mini-grid">
-    <div className="game-mini-card">
-      <div className="game-mini-icon">🐦</div>
-      <h4>Flappy Bird</h4>
-      <p>Classic arcade</p>
-      <p className="prize">Win up to $50</p>
-      <Link to="/games/flappy-bird" className="play-mini">Play →</Link>
-    </div>
-    <div className="game-mini-card">
-      <div className="game-mini-icon">🚀</div>
-      <h4>Space Shooter</h4>
-      <p>1v1 battles</p>
-      <p className="prize">Win up to $100</p>
-      <Link to="/games/space-shooter" className="play-mini">Play →</Link>
-    </div>
-    <div className="game-mini-card">
-      <div className="game-mini-icon">⚽</div>
-      <h4>Ball Crush</h4>
-      <p>Arcade action</p>
-      <p className="prize">Win up to $75</p>
-      <Link to="/games/ball-crush" className="play-mini">Play →</Link>
-    </div>
-    {/* Add a fourth card to demonstrate scrolling */}
-    <div className="game-mini-card">
-      <div className="game-mini-icon">🎯</div>
-      <h4>Coming Soon</h4>
-      <p>New game</p>
-      <p className="prize">Stay tuned!</p>
-      <span className="play-mini" style={{ opacity: 0.5 }}>Soon →</span>
-    </div>
-  </div>
-</div>
+        <div className="popular-games">
+          <h2>Popular Games</h2>
+          <div className="games-mini-grid">
+            <div className="game-mini-card">
+              <div className="game-mini-icon">🐦</div>
+              <h4>Flappy Bird</h4>
+              <p>Classic arcade</p>
+              <p className="prize">Win up to $50</p>
+              <Link to="/games/flappy-bird" className="play-mini">Play →</Link>
+            </div>
+            <div className="game-mini-card">
+              <div className="game-mini-icon">🚀</div>
+              <h4>Space Shooter</h4>
+              <p>1v1 battles</p>
+              <p className="prize">Win up to $100</p>
+              <Link to="/games/space-shooter" className="play-mini">Play →</Link>
+            </div>
+            <div className="game-mini-card">
+              <div className="game-mini-icon">⚽</div>
+              <h4>Ball Crush</h4>
+              <p>Arcade action</p>
+              <p className="prize">Win up to $75</p>
+              <Link to="/games/ball-crush" className="play-mini">Play →</Link>
+            </div>
+          </div>
+        </div>
       </main>
 
       {/* Bottom Navigation */}
       <nav className="bottom-nav">
-        {navItems.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          if (item.action === 'logout') {
+            return (
+              <button
+                key={item.path}
+                onClick={handleLogout}
+                className="nav-item logout-btn"
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </button>
+            );
+          }
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );

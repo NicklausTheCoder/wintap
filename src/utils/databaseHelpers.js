@@ -1,4 +1,4 @@
-import { ref, get, set, update } from 'firebase/database';
+import { ref, get, set, update,push } from 'firebase/database';
 import { database } from '../firebase';
 
 // GET USER PROFILE

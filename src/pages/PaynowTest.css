@@ -1,0 +1,156 @@
+/* src/pages/PaynowTest.css */
+.paynow-test-container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.paynow-test-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.paynow-test-card h1 {
+  margin: 0 0 10px;
+  color: #333;
+  font-size: 28px;
+}
+
+.paynow-test-card p {
+  color: #666;
+  margin-bottom: 30px;
+}
+
+.test-section {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 25px;
+}
+
+.test-section h3 {
+  margin: 0 0 15px;
+  color: #555;
+}
+
+.amount-input-group {
+  display: flex;
+  align-items: center;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.currency {
+  background: #f0f0f0;
+  padding: 0 15px;
+  font-size: 18px;
+  color: #666;
+  line-height: 48px;
+}
+
+.amount-input {
+  flex: 1;
+  border: none !important;
+  padding: 12px;
+  font-size: 16px;
+  outline: none;
+}
+
+.paynow-test-button {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.paynow-test-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+}
+
+.paynow-test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payment-status {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.payment-status.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.payment-status.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.payment-status.info {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.test-info {
+  margin-top: 20px;
+  padding: 15px;
+  background: #e9ecef;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.test-info h4 {
+  margin: 0 0 10px;
+  color: #495057;
+}
+
+.test-info p {
+  margin: 5px 0;
+  color: #212529;
+}
+
+.test-instructions {
+  background: #fff3cd;
+  border-radius: 12px;
+  padding: 20px;
+  border-left: 4px solid #ffc107;
+}
+
+.test-instructions h3 {
+  margin: 0 0 10px;
+  color: #856404;
+}
+
+.test-instructions ol {
+  margin: 0;
+  padding-left: 20px;
+  color: #856404;
+}
+
+.test-instructions li {
+  margin: 5px 0;
+}

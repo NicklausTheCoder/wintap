@@ -162,53 +162,7 @@ body {
   color: #fbbf24;
 }
 
-/* Quick Actions */
-.quick-actions {
-  margin-bottom: 24px;
-}
-
-.quick-actions h2 {
-  font-size: 16px;
-  color: #fff;
-  margin-bottom: 12px;
-}
-
-.action-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 215, 0, 0.1);
-  border-radius: 12px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #fff;
-  text-decoration: none;
-  transition: all 0.2s;
-}
-
-.action-btn.primary {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  border: none;
-  color: #0f172a;
-  font-weight: bold;
-}
-
-.action-btn:active {
-  transform: scale(0.98);
-}
-
-.btn-icon {
-  font-size: 18px;
-}
-
-/* Recent Games */
+/* Game Stats Grid - NEW */
 .recent-games {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
@@ -236,51 +190,153 @@ body {
   font-size: 12px;
 }
 
-.games-table {
-  width: 100%;
-  border-collapse: collapse;
+/* Games Grid Layout - NEW */
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
-.games-table th {
-  text-align: left;
-  font-size: 10px;
-  color: #94a3b8;
-  padding-bottom: 8px;
-  font-weight: normal;
+/* Game Stat Card - NEW */
+.game-stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 12px 10px;
+  border: 1px solid rgba(255, 215, 0, 0.1);
+  transition: transform 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Prevent overflow */
 }
 
-.games-table td {
-  padding: 8px 0;
+.game-stat-card:active {
+  transform: scale(0.98);
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.game-stat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.game-icon {
+  font-size: 20px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.game-stat-header h4 {
   font-size: 12px;
   color: #fff;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-stat-details {
+  margin-bottom: 10px;
+  flex: 1;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 4px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.result-badge {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row span:first-child {
+  color: #94a3b8;
+}
+
+.stat-row span:last-child {
+  color: #fff;
+  font-weight: 500;
+}
+
+.stat-row .wins {
+  color: #4ade80;
   font-weight: bold;
 }
 
-.result-badge.won {
-  background: rgba(74, 222, 128, 0.2);
-  color: #4ade80;
+.game-play-link {
+  color: #fbbf24;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: bold;
+  display: inline-block;
+  padding: 4px 0;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 215, 0, 0.2);
+  width: 100%;
+  text-align: center;
 }
 
-.result-badge.lost {
-  background: rgba(248, 113, 113, 0.2);
-  color: #f87171;
+/* Quick Actions */
+.quick-actions {
+  margin-bottom: 24px;
 }
 
-.profit {
-  color: #4ade80;
+.quick-actions h2 {
+  font-size: 16px;
+  color: #fff;
+  margin-bottom: 12px;
 }
 
+.action-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 215, 0, 0.1);
+  border-radius: 12px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  text-decoration: none;
+  transition: all 0.2s;
+  font-size: 11px;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border: none;
+  color: #0f172a;
+  font-weight: bold;
+}
+
+.action-btn:active {
+  transform: scale(0.98);
+}
+
+.btn-icon {
+  font-size: 20px;
+}
+
+/* No Games State */
 .no-games {
   text-align: center;
   padding: 24px;
   color: #94a3b8;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
 }
 
 .btn-play-now {
@@ -296,11 +352,11 @@ body {
 }
 
 /* Popular Games */
-/* Popular Games - Fixed scrolling */
 .popular-games {
   margin-bottom: 20px;
   width: 100%;
-  overflow: hidden; /* Hide overflow but allow scrolling */
+  overflow: hidden;
+  position: relative;
 }
 
 .popular-games h2 {
@@ -315,15 +371,14 @@ body {
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 4px 12px 4px; /* Added padding for better touch scrolling */
-  margin: 0 -4px; /* Compensate for padding */
-  scrollbar-width: thin; /* For Firefox */
-  scrollbar-color: #fbbf24 #1e293b; /* For Firefox */
-  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-  scroll-snap-type: x mandatory; /* Optional: snap to cards */
+  padding: 4px 4px 12px 4px;
+  margin: 0 -4px;
+  scrollbar-width: thin;
+  scrollbar-color: #fbbf24 #1e293b;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
 }
 
-/* Show scrollbar on desktop (optional) */
 .games-mini-grid::-webkit-scrollbar {
   height: 4px;
 }
@@ -338,7 +393,6 @@ body {
   border-radius: 10px;
 }
 
-/* Hide scrollbar on mobile but keep functionality */
 @media (max-width: 768px) {
   .games-mini-grid::-webkit-scrollbar {
     display: none;
@@ -353,8 +407,8 @@ body {
   padding: 16px;
   min-width: 140px;
   max-width: 160px;
-  flex-shrink: 0; /* Prevent cards from shrinking */
-  scroll-snap-align: start; /* Optional: snap to cards */
+  flex-shrink: 0;
+  scroll-snap-align: start;
   transition: transform 0.2s;
 }
 
@@ -401,11 +455,6 @@ body {
   padding: 4px 0;
 }
 
-/* Add a fade effect to indicate scrolling */
-.popular-games {
-  position: relative;
-}
-
 .popular-games::after {
   content: '';
   position: absolute;
@@ -419,56 +468,7 @@ body {
   border-radius: 0 16px 16px 0;
 }
 
-.play-mini {
-  color: #fbbf24;
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: bold;
-}
-
-/* Bottom Navigation */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 215, 0, 0.2);
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 0;
-  padding-bottom: env(safe-area-inset-bottom, 8px);
-  z-index: 100;
-}
-
-.nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-decoration: none;
-  color: #94a3b8;
-  font-size: 10px;
-  gap: 4px;
-  padding: 4px 0;
-  flex: 1;
-  transition: color 0.2s;
-}
-
-.nav-item.active {
-  color: #fbbf24;
-}
-
-.nav-item.active .nav-icon {
-  transform: scale(1.1);
-}
-
-.nav-icon {
-  font-size: 20px;
-  transition: transform 0.2s;
-}
-
-/* Rank Card (compact version) */
+/* Rank Card */
 .rank-card {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
@@ -521,6 +521,52 @@ body {
   border-radius: 2px;
 }
 
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 215, 0, 0.2);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: #94a3b8;
+  font-size: 10px;
+  gap: 4px;
+  padding: 4px 0;
+  flex: 1;
+  transition: color 0.2s;
+}
+
+.nav-item.active {
+  color: #fbbf24;
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-icon {
+  font-size: 20px;
+  transition: transform 0.2s;
+}
+
+.nav-label {
+  font-size: 10px;
+}
+
 /* Loading state */
 .loading-container {
   display: flex;
@@ -544,4 +590,48 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 360px) {
+  .stats-grid {
+    gap: 8px;
+  }
+  
+  .stat-card {
+    padding: 12px;
+  }
+  
+  .stat-value {
+    font-size: 18px;
+  }
+  
+  .games-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .action-buttons {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .action-btn.primary {
+    grid-column: span 2;
+  }
+}
+
+/* Small height devices */
+@media (max-height: 600px) {
+  .dashboard-main {
+    padding-bottom: 80px;
+  }
+  
+  .stats-grid {
+    margin-bottom: 12px;
+  }
+  
+  .recent-games,
+  .quick-actions,
+  .popular-games {
+    margin-bottom: 16px;
+  }
 }

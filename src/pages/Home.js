@@ -79,6 +79,9 @@ function Home({ user }) {
           <button onClick={() => scrollToSection('games')}>
             Games
           </button>
+          <Link to="/paynow-test" className="test-paynow-btn">
+            Test Paynow Integration
+          </Link>
           <button onClick={() => scrollToSection('how-it-works')}>
             How It Works
           </button>
@@ -136,7 +139,7 @@ function Home({ user }) {
       <section id="features" className="featured-games">
         <h2>🎯 Why Choose WinTap?</h2>
         <p className="section-subtitle">The best platform to play and win real money</p>
-        
+
         <div className="games-grid">
           <div className="game-card">
             <div className="game-image">⚡</div>
@@ -160,7 +163,7 @@ function Home({ user }) {
       <section id="games" className="featured-games">
         <h2>🎯 Featured Games</h2>
         <p className="section-subtitle">Play these popular games and win big!</p>
-        
+
         <div className="games-grid">
           {games.map(game => (
             <div key={game.id} className="game-card">
