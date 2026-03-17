@@ -20,7 +20,266 @@ body {
   padding-bottom: 70px; /* Space for bottom nav */
   position: relative;
 }
+/* Add to Wallet.css */
 
+.withdraw-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-cancel {
+  flex: 1;
+  padding: 12px;
+  background: #f1f3f4;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #e8eaed;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ecocash-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.ecocash-input:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+}
+
+.ecocash-icon {
+  padding: 12px;
+  background: #f8f9fa;
+  color: #5f6368;
+  font-size: 18px;
+  border-right: 1px solid #dadce0;
+}
+
+.ecocash-input input {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+}
+
+.error-hint {
+  color: #d93025;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+/* Add to Wallet.css */
+
+.withdraw-info {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+  border: 1px solid #e0e0e0;
+}
+
+.withdraw-info p {
+  margin: 8px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #5f6368;
+}
+
+.withdraw-info strong {
+  color: #202124;
+  font-size: 16px;
+}
+
+.withdraw-balance-info {
+  background: #e8f0fe;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 15px 0;
+  text-align: center;
+  border: 1px solid #1a73e8;
+}
+
+.withdraw-balance-info p {
+  margin: 0;
+  font-size: 16px;
+  color: #1a73e8;
+  font-weight: 500;
+}
+
+.withdraw-balance-info strong {
+  font-size: 20px;
+  color: #1a73e8;
+}
+
+.quick-amounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 8px;
+  margin: 15px 0;
+}
+
+.quick-amounts button {
+  padding: 10px;
+  background: #f1f3f4;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #3c4043;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-amounts button:hover:not(:disabled) {
+  background: #e8eaed;
+  border-color: #bdc1c6;
+}
+
+.quick-amounts button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ecocash-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  transition: all 0.2s;
+}
+
+.ecocash-input:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+}
+
+.ecocash-icon {
+  padding: 12px;
+  background: #f8f9fa;
+  color: #5f6368;
+  font-size: 18px;
+  border-right: 1px solid #dadce0;
+}
+
+.ecocash-input input {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+}
+
+.error-hint {
+  color: #d93025;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.input-hint {
+  color: #5f6368;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.withdraw-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-cancel {
+  flex: 1;
+  padding: 12px;
+  background: #f1f3f4;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #e8eaed;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Update existing withdraw button */
+.btn-withdraw-large:disabled {
+  background: #e8eaed;
+  color: #9aa0a6;
+  cursor: not-allowed;
+  border-color: #dadce0;
+}
+
+.btn-withdraw {
+  width: 100%;
+  padding: 14px;
+  background: #ea4335;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-withdraw:hover:not(:disabled) {
+  background: #d33828;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(234,67,53,0.3);
+}
+
+.btn-withdraw:disabled {
+  background: #f1f3f4;
+  color: #9aa0a6;
+  cursor: not-allowed;
+}
+.withdraw-hint {
+  display: block;
+  text-align: center;
+  color: #5f6368;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* Update existing withdraw button */
+.btn-withdraw-large:disabled {
+  background: #e8eaed;
+  color: #9aa0a6;
+  cursor: not-allowed;
+  border-color: #dadce0;
+}
 /* Header */
 .wallet-header {
   background: rgba(255, 255, 255, 0.05);

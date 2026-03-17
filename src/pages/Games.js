@@ -14,17 +14,19 @@ function Games({ user }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
-  
+
   // SECRET KEY - must match the one in your Phaser game
   const SECRET_KEY = 'my-super-secret-key-123';
-  
+
+  const GAME_URL_BASE = 'http://localhost:8080';
+
   // Game URLs
   const GAME_URLS = {
-    'flappy-bird': 'https://flappy-games.onrender.com/flappy-bird',
-    'space-shooter': 'https://flappy-games.onrender.com/space-shooter',
-    'ball-crush': 'https://flappy-games.onrender.com/ball-crush'
+    'flappy-bird': `${GAME_URL_BASE}/flappy-bird`,
+    'space-shooter': `${GAME_URL_BASE}/space-shooter`,
+    'ball-crush': `${GAME_URL_BASE}/ball-crush`
   };
-  
+
   // Navigation items for bottom bar
   const navItems = [
     { path: '/dashboard', icon: '📊', label: 'Home' },
@@ -33,7 +35,7 @@ function Games({ user }) {
     { path: '/profile', icon: '👤', label: 'Profile' },
     { path: '/leaderboard', icon: '🏆', label: 'Rank' }
   ];
-  
+
   const [games, setGames] = useState([
     {
       id: 'flappy-bird',
@@ -49,12 +51,12 @@ function Games({ user }) {
       featured: true
     },
     {
-      id: 'space-shooter',
-      title: 'Space Shooter',
-      description: '1v1 space battle. Shoot down your opponent and win!',
-      image: '🚀',
-      entryFee: 10,
-      prize: 100,
+      id: 'Checkers',
+      title: 'Checkers',
+      description: 'Classic checkers game. Test your strategy and win!',
+      image: '♟️',
+      entryFee: 5,
+      prize: 50,
       players: 892,
       difficulty: 'Hard',
       active: true,
@@ -77,11 +79,11 @@ function Games({ user }) {
   ]);
 
   // Filter games by category
-  const filteredGames = activeCategory === 'all' 
-    ? games 
+  const filteredGames = activeCategory === 'all'
+    ? games
     : activeCategory === 'featured'
-    ? games.filter(game => game.featured)
-    : games.filter(game => game.category === activeCategory);
+      ? games.filter(game => game.featured)
+      : games.filter(game => game.category === activeCategory);
 
   // Categories for tabs
   const categories = [
@@ -96,12 +98,12 @@ function Games({ user }) {
     try {
       const jsonString = JSON.stringify(data);
       const encrypted = CryptoJS.AES.encrypt(jsonString, SECRET_KEY).toString();
-      
+
       // Make URL safe
       const urlSafe = encrypted
         .replace(/\//g, '_')
         .replace(/\+/g, '-');
-      
+
       return urlSafe;
     } catch (error) {
       console.error('Encryption error:', error);
@@ -117,7 +119,7 @@ function Games({ user }) {
 
     // Listen to wallet balance in real-time from the correct path: wallets/${userId}
     const walletRef = ref(database, `wallets/${user.uid}`);
-    
+
     const unsubscribe = onValue(walletRef, (snapshot) => {
       if (snapshot.exists()) {
         const walletData = snapshot.val();
@@ -165,12 +167,12 @@ function Games({ user }) {
     try {
       const gamesRef = ref(database, 'games');
       const snapshot = await get(gamesRef);
-      
+
       if (snapshot.exists()) {
         const gamesData = snapshot.val();
-        
+
         // Update games with real player counts
-        setGames(prevGames => 
+        setGames(prevGames =>
           prevGames.map(game => ({
             ...game,
             players: gamesData[game.id]?.activePlayers || game.players
@@ -205,7 +207,7 @@ function Games({ user }) {
       // Deduct entry fee from wallet - using correct path: wallets/${user.uid}
       const walletRef = ref(database, `wallets/${user.uid}`);
       const newBalance = balance - game.entryFee;
-      
+
       // Get current wallet data first
       const walletSnapshot = await get(walletRef);
       const currentWallet = walletSnapshot.exists() ? walletSnapshot.val() : {
@@ -217,7 +219,7 @@ function Games({ user }) {
         totalBonus: 0,
         currency: 'USD'
       };
-      
+
       // Update with new balance
       await set(walletRef, {
         ...currentWallet,
@@ -242,7 +244,7 @@ function Games({ user }) {
       // Update game stats in users/${uid}/games/${gameId}
       const gameStatsRef = ref(database, `users/${user.uid}/games/${game.id}`);
       const statsSnapshot = await get(gameStatsRef);
-      
+
       if (statsSnapshot.exists()) {
         const currentStats = statsSnapshot.val();
         await set(gameStatsRef, {
@@ -289,16 +291,16 @@ function Games({ user }) {
       // Get user data from Firebase - from users/${uid} path
       const userRef = ref(database, `users/${user.uid}`);
       const userSnapshot = await get(userRef);
-      
+
       let username = user.email?.split('@')[0] || 'player';
       let displayName = username;
-      
+
       if (userSnapshot.exists()) {
         const userData = userSnapshot.val();
         username = userData.public?.username || userData.username || username;
         displayName = userData.public?.displayName || userData.displayName || username;
       }
-      
+
       // Create user data object for the game
       const userData = {
         username: username,
@@ -311,34 +313,34 @@ function Games({ user }) {
         gameId: game.id,
         balance: balance
       };
-      
+
       console.log('📦 Preparing game data:', userData);
-      
+
       // Encrypt the data
       const encrypted = encryptData(userData);
-      
+
       if (!encrypted) {
         throw new Error('Encryption failed');
       }
-      
+
       // Save to storage as backup
       sessionStorage.setItem('gameUser', JSON.stringify(userData));
       localStorage.setItem('gameUser', JSON.stringify(userData));
-      
+
       // Get the correct game URL
       let gameUrl = GAME_URLS[game.id];
-      
+
       // If no specific URL, use default with game param
       if (!gameUrl) {
-        gameUrl = `https://flappy-games.onrender.com?game=${game.id}`;
+        gameUrl = `${GAME_URL_BASE}?game=${game.id}`;
       }
-      
+
       // Redirect with encrypted data
       const redirectUrl = `${gameUrl}?user=${encrypted}`;
       console.log('🚀 Redirecting to:', redirectUrl);
-      
+
       window.location.href = redirectUrl;
-      
+
     } catch (error) {
       console.error('❌ Redirect error:', error);
       alert('Failed to launch game. Please try again.');
@@ -404,8 +406,8 @@ function Games({ user }) {
             <div className="stat-icon">📊</div>
             <h4>Win Rate</h4>
             <p className="stat-value">
-              {wallet?.totalWon && wallet?.totalLost 
-                ? Math.round((wallet.totalWon / (wallet.totalWon + wallet.totalLost)) * 100) 
+              {wallet?.totalWon && wallet?.totalLost
+                ? Math.round((wallet.totalWon / (wallet.totalWon + wallet.totalLost)) * 100)
                 : 0}%
             </p>
           </div>
@@ -432,7 +434,7 @@ function Games({ user }) {
               <div className="game-info">
                 <h2>{game.title}</h2>
                 <p>{game.description}</p>
-                
+
                 <div className="game-meta">
                   <span className="difficulty" data-level={game.difficulty}>
                     {game.difficulty}
@@ -444,7 +446,7 @@ function Games({ user }) {
                     <span className="live-badge">LIVE</span>
                   )}
                 </div>
-                
+
                 <div className="game-prize-info">
                   <div className="entry-fee">
                     <span>Entry</span>
@@ -461,14 +463,14 @@ function Games({ user }) {
                     </strong>
                   </div>
                 </div>
-                
-                <button 
+
+                <button
                   className={`btn-play-game ${game.featured ? 'featured-game' : ''}`}
                   onClick={() => handlePlayGame(game)}
                   disabled={balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id)}
                 >
-                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id) 
-                    ? `Need ${formatCurrency(game.entryFee)}` 
+                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id)
+                    ? `Need ${formatCurrency(game.entryFee)}`
                     : `Play ${game.title}`}
                 </button>
 

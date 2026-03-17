@@ -79,9 +79,7 @@ function Home({ user }) {
           <button onClick={() => scrollToSection('games')}>
             Games
           </button>
-          <Link to="/paynow-test" className="test-paynow-btn">
-            Test Paynow Integration
-          </Link>
+        
           <button onClick={() => scrollToSection('how-it-works')}>
             How It Works
           </button>
