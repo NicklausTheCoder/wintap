@@ -25,13 +25,12 @@
     "dev": "react-scripts start",
     "build": "react-scripts build",
     "snap": "react-snap --config=react-snap.config.js",
-    "postbuild": "npm run snap",
+    "postbuild": "echo 'Skipping snap on Render'",
+    "build:full": "react-scripts build && react-snap --config=react-snap.config.js",
     "serve": "serve -s build -l 3000",
-    "preview": "npm run build && serve -s build -l 3000"
+    "preview": "npm run build:full && serve -s build -l 3000"
   },
-  "reactSnap": {
-    "config": "react-snap.config.js"
-  },
+
 
   "eslintConfig": {
     "extends": [
