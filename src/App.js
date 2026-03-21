@@ -1,4 +1,4 @@
-import React, { useState, useEffect , lazy } from 'react';
+import React, { useState, useEffect, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
@@ -7,8 +7,8 @@ import GameDetail from './pages/GameDetail';
 import { PaynowReactWrapper } from 'paynow-react';
 import './App.css';
 import PaynowTest from './pages/PaynowTest';
-
 import MobileOnly from './components/MobileWarning';
+
 
 // Pages
 import Home from './pages/Home';
@@ -95,31 +95,33 @@ function App({ Component }) {
   return (
 
     <HelmetProvider>
-      <Router>
-        <div className="App">
-          <div className="app-wrapper" style={{
-            minHeight: 'var(--window-height, 100vh)',
-            width: '100%',
-            overflowX: 'hidden',
-            position: 'relative'
-          }}>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<Home user={user} />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/paynow-test" element={<PaynowTest />} />
-              {/* Protected Routes */}
-              <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
-              <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
-              <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
-              <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
-              <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
-              <Route path="/leaderboard" element={<Leaderboard user={user} />} />
-            </Routes>
+      <MobileOnly>
+        <Router>
+          <div className="App">
+            <div className="app-wrapper" style={{
+              minHeight: 'var(--window-height, 100vh)',
+              width: '100%',
+              overflowX: 'hidden',
+              position: 'relative'
+            }}>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<Home user={user} />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/paynow-test" element={<PaynowTest />} />
+                {/* Protected Routes */}
+                <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
+                <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
+                <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
+                <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
+                <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
+                <Route path="/leaderboard" element={<Leaderboard user={user} />} />
+              </Routes>
+            </div>
           </div>
-        </div>
-      </Router>
+        </Router>
+      </MobileOnly >
     </HelmetProvider>
   );
 }
