@@ -325,7 +325,7 @@ const verifyPayment = async (reference) => {
 
     // Call Laravel to verify with Paynow
     console.log('🌐 Calling Laravel verify API');
-    const response = await fetch('http://127.0.0.1:8000/api/paynow/verify', {
+    const response = await fetch('https://wintap.webiconic.co.zw/public/api/paynow/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -465,7 +465,7 @@ const verifyPayment = async (reference) => {
 
     try {
       // Make API call to your backend
-      const apiUrl = 'http://127.0.0.1:8000/api/paynow/initiate';
+      const apiUrl = 'https://wintap.webiconic.co.zw/public/api/paynow/initiate';
       console.log('🌐 Making API call to:', apiUrl);
 
       const response = await fetch(apiUrl, {
