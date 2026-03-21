@@ -19,11 +19,20 @@
     "serve": "^14.2.6",
     "web-vitals": "^2.1.4"
   },
+
   "scripts": {
-    "start": "serve -s build -l 3000",
+    "start": "react-scripts start",
+    "dev": "react-scripts start",
     "build": "react-scripts build",
-    "dev": "react-scripts start"
+    "snap": "react-snap --config=react-snap.config.js",
+    "postbuild": "npm run snap",
+    "serve": "serve -s build -l 3000",
+    "preview": "npm run build && serve -s build -l 3000"
   },
+  "reactSnap": {
+    "config": "react-snap.config.js"
+  },
+
   "eslintConfig": {
     "extends": [
       "react-app",

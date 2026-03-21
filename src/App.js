@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect , lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { HelmetProvider } from 'react-helmet-async';
-import GameDetail from 'pages/GameDetail';
+import GameDetail from './pages/GameDetail';
 import { PaynowReactWrapper } from 'paynow-react';
 import './App.css';
 import PaynowTest from './pages/PaynowTest';
@@ -32,6 +32,9 @@ function App({ Component }) {
     result_url: process.env.REACT_APP_PAYNOW_RESULT_URL,
     return_url: process.env.REACT_APP_PAYNOW_RETURN_URL,
   };
+
+
+  const GameDetail = lazy(() => import('./pages/GameDetail'));
 
   useEffect(() => {
     // THIS IS THE KEY - it listens to Firebase auth state and updates automatically
