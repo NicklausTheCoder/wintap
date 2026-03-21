@@ -1,6 +1,7 @@
 // Home.jsx
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import SEO from './components/SEO';
 import './Home.css';
 
 function Home({ user }) {
@@ -65,6 +66,14 @@ function Home({ user }) {
   };
 
   return (
+        <>
+      <SEO 
+        title="Play Games & Win Real Money | WinTap Games"
+        description="Win real money playing exciting games like Flappy Bird, Space Shooter, and Ball Crush. Instant withdrawals, secure payments, and thousands of active players."
+        keywords="win money online, play games for cash, real money games, Flappy Bird, Space Shooter, gaming platform"
+        url="/"
+        type="website"
+      />
     <div className="home">
       {/* Navigation Bar - Desktop only */}
       <nav className="navbar">
@@ -287,6 +296,7 @@ function Home({ user }) {
         ))}
       </nav>
     </div>
+      </>
   );
 }
 
