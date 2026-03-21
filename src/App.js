@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
+import { HelmetProvider } from 'react-helmet-async';
+import GameDetail from './pages/GameDetail';
 import { PaynowReactWrapper } from 'paynow-react';
 import './App.css';
 import PaynowTest from './pages/PaynowTest';
@@ -24,12 +26,12 @@ function App({ Component }) {
   const [loading, setLoading] = useState(true);
 
 
- const paynow_config = {
-  integration_id: process.env.REACT_APP_PAYNOW_INTEGRATION_ID,
-  integration_key: process.env.REACT_APP_PAYNOW_INTEGRATION_KEY,
-  result_url: process.env.REACT_APP_PAYNOW_RESULT_URL,
-  return_url: process.env.REACT_APP_PAYNOW_RETURN_URL,
-};
+  const paynow_config = {
+    integration_id: process.env.REACT_APP_PAYNOW_INTEGRATION_ID,
+    integration_key: process.env.REACT_APP_PAYNOW_INTEGRATION_KEY,
+    result_url: process.env.REACT_APP_PAYNOW_RESULT_URL,
+    return_url: process.env.REACT_APP_PAYNOW_RETURN_URL,
+  };
 
   useEffect(() => {
     // THIS IS THE KEY - it listens to Firebase auth state and updates automatically
@@ -89,33 +91,33 @@ function App({ Component }) {
 
   return (
 
-
-    <Router>
-      <div className="App">
-        <div className="app-wrapper" style={{
-          minHeight: 'var(--window-height, 100vh)',
-          width: '100%',
-          overflowX: 'hidden',
-          position: 'relative'
-        }}>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Home user={user} />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/paynow-test" element={<PaynowTest />} />
-            {/* Protected Routes */}
-            <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
-            <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
-            <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
-            <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
-            <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
-            <Route path="/leaderboard" element={<Leaderboard user={user} />} />
-          </Routes>
+    <HelmetProvider>
+      <Router>
+        <div className="App">
+          <div className="app-wrapper" style={{
+            minHeight: 'var(--window-height, 100vh)',
+            width: '100%',
+            overflowX: 'hidden',
+            position: 'relative'
+          }}>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Home user={user} />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/paynow-test" element={<PaynowTest />} />
+              {/* Protected Routes */}
+              <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
+              <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />
+              <Route path="/games" element={user ? <Games user={user} /> : <Login />} />
+              <Route path="/wallet" element={user ? <Wallet user={user} /> : <Login />} />
+              <Route path="/referrals" element={user ? <Referrals user={user} /> : <Login />} />
+              <Route path="/leaderboard" element={<Leaderboard user={user} />} />
+            </Routes>
+          </div>
         </div>
-      </div>
-    </Router>
-
+      </Router>
+    </HelmetProvider>
   );
 }
 

@@ -1,3 +1,7 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /dashboard/
+Disallow: /profile/
+Disallow: /wallet/
+Sitemap: https://wintaptapgames.com/sitemap.xml
