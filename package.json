@@ -22,19 +22,7 @@
   "scripts": {
     "start": "serve -s build -l 3000",
     "build": "react-scripts build",
-    "dev": "react-scripts start",
-    "postbuild": "react-snap"
-  },
-  "reactSnap": {
-    "include": [
-      "/"
-    ],
-    "exclude": [
-      "/*"
-    ],
-    "timeout": 10000,
-    "waitFor": 500,
-    "skipThirdPartyRequests": true
+    "dev": "react-scripts start"
   },
   "eslintConfig": {
     "extends": [
