@@ -63,12 +63,12 @@ export const createUserInDatabase = async (userId, userEmail, username, referral
       referredBy: referralCode || null
     },
     wallet: {
-      balance: 10.00,
+      balance: 0.00,
       totalDeposited: 0,
       totalWithdrawn: 0,
       totalWon: 0,
       totalLost: 0,
-      totalBonus: 10.00,
+      totalBonus: 0.00,
       currency: 'USD',
       lastUpdated: now
     },
@@ -136,12 +136,12 @@ export const createUserInDatabase = async (userId, userEmail, username, referral
 
   // 2. CRITICAL FIX: Create wallet in separate wallets path for Dashboard
   await set(ref(database, `wallets/${userId}`), {
-    balance: 10.00,
+    balance: 0.00,
     totalDeposited: 0,
     totalWithdrawn: 0,
     totalWon: 0,
     totalLost: 0,
-    totalBonus: 10.00,
+    totalBonus: 0.00,
     currency: 'USD',
     lastUpdated: now,
     isActive: true
@@ -168,8 +168,8 @@ export const createUserInDatabase = async (userId, userEmail, username, referral
   const transactionId = `txn_${Date.now()}`;
   await set(ref(database, `transactions/${userId}/${transactionId}`), {
     type: 'bonus',
-    amount: 10.00,
-    balance: 10.00,
+    amount: 0.00,
+    balance: 0.00,
     description: 'Welcome bonus',
     status: 'completed',
     timestamp: now
