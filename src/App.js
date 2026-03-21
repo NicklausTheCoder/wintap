@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { HelmetProvider } from 'react-helmet-async';
-import GameDetail from './pages/GameDetail';
+import GameDetail from 'pages/GameDetail';
 import { PaynowReactWrapper } from 'paynow-react';
 import './App.css';
 import PaynowTest from './pages/PaynowTest';

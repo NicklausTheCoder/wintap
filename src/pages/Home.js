@@ -1,7 +1,7 @@
 // Home.jsx
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import SEO from './components/SEO';
+import SEO from '../components/SEO';
 import './Home.css';
 
 function Home({ user }) {
