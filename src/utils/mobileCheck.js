@@ -4,7 +4,19 @@
  * Multiple layers of detection to prevent desktop bypass
  */
 
-export const isMobileDevice = () => {
+let hasBlocked = false; // Global flag to prevent multiple blocks
+let cachedResult = null; // Cache the detection result
+let lastCheckTime = 0;
+const CHECK_COOLDOWN = 1000; // Only check once per second
+
+export const isMobileDevice = (forceCheck = false) => {
+  const now = Date.now();
+  
+  // Return cached result if within cooldown period and not forcing check
+  if (!forceCheck && cachedResult && (now - lastCheckTime) < CHECK_COOLDOWN) {
+    return cachedResult;
+  }
+  
   // Layer 1: User Agent Detection (hardest to fake)
   const userAgent = navigator.userAgent || navigator.vendor || window.opera;
   
@@ -29,6 +41,10 @@ export const isMobileDevice = () => {
 
   const hasMobileUA = mobilePatterns.some(pattern => pattern.test(userAgent));
   
+  // Check for iPad specifically (can be detected as desktop with newer iPads)
+  const isIPad = /iPad/i.test(userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  
   // Layer 2: Touch Capability Detection
   const hasTouch = (
     'ontouchstart' in window ||
@@ -36,21 +52,21 @@ export const isMobileDevice = () => {
     navigator.msMaxTouchPoints > 0
   );
 
-  // Layer 3: Screen Metrics (combined with other factors)
+  // Layer 3: Screen Metrics (adjusted for modern phones)
   const screenWidth = window.innerWidth || document.documentElement.clientWidth;
   const screenHeight = window.innerHeight || document.documentElement.clientHeight;
   
-  // Mobile screen characteristics
-  const isMobileScreen = screenWidth <= 428 && screenHeight <= 926;
-  const isMobileAspectRatio = screenHeight / screenWidth > 1.5; // Tall screen ratio
+  // Updated mobile screen detection - more inclusive
+  const isMobileScreen = screenWidth <= 768; // Increased from 428
+  const isMobileAspectRatio = screenHeight / screenWidth > 1.3; // Lowered from 1.5
   
   // Layer 4: Device Memory (mobile devices typically have less)
   const deviceMemory = navigator.deviceMemory || 0;
-  const isLowMemory = deviceMemory > 0 && deviceMemory <= 4;
+  const isLowMemory = deviceMemory > 0 && deviceMemory <= 8; // Increased from 4
   
   // Layer 5: CPU Cores (mobile devices typically have fewer)
   const cpuCores = navigator.hardwareConcurrency || 0;
-  const isLowCoreCount = cpuCores > 0 && cpuCores <= 8;
+  const isLowCoreCount = cpuCores > 0 && cpuCores <= 12; // Increased from 8
   
   // Layer 6: Connection Type (mobile often uses cellular)
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -67,33 +83,42 @@ export const isMobileDevice = () => {
   const platform = navigator.platform || '';
   const isDesktopPlatform = platform.includes('Win') || platform.includes('Mac') || platform.includes('Linux');
   
-  // Scoring system
+  // Scoring system - adjusted weights to favor mobile more
   let mobileScore = 0;
   let desktopScore = 0;
   
-  // Mobile points
-  if (hasMobileUA) mobileScore += 30;
-  if (hasTouch) mobileScore += 20;
-  if (isMobileScreen) mobileScore += 15;
-  if (isMobileAspectRatio) mobileScore += 10;
-  if (isLowMemory) mobileScore += 5;
-  if (isLowCoreCount) mobileScore += 5;
-  if (isCellular) mobileScore += 10;
-  if (hasOrientationSupport) mobileScore += 5;
-  if (hasMultiTouch) mobileScore += 10;
+  // Mobile points - increased weights
+  if (hasMobileUA) mobileScore += 40;
+  if (isIPad) mobileScore += 35; // iPad should be treated as mobile/tablet
+  if (hasTouch) mobileScore += 25;
+  if (isMobileScreen) mobileScore += 20;
+  if (isMobileAspectRatio) mobileScore += 15;
+  if (isLowMemory) mobileScore += 8;
+  if (isLowCoreCount) mobileScore += 8;
+  if (isCellular) mobileScore += 15;
+  if (hasOrientationSupport) mobileScore += 10;
+  if (hasMultiTouch) mobileScore += 15;
   
-  // Desktop points
-  if (!hasTouch) desktopScore += 20;
-  if (screenWidth > 1024) desktopScore += 15;
-  if (isDesktopPlatform) desktopScore += 15;
-  if (!hasMobileUA) desktopScore += 10;
+  // Desktop points - reduced weights
+  if (!hasTouch) desktopScore += 15;
+  if (screenWidth > 1024 && !isIPad) desktopScore += 10; // Only count for non-iPad
+  if (isDesktopPlatform && !isIPad) desktopScore += 10;
+  if (!hasMobileUA && !isIPad) desktopScore += 5;
   
-  // Also check for common desktop indicators
-  if (window.chrome && !window.chrome.runtime) desktopScore += 10; // Not Chrome extension
+  // Special case: Large tablets should still be considered mobile
+  const isLargeTablet = screenWidth >= 768 && screenWidth <= 1024 && hasTouch && hasMultiTouch;
+  if (isLargeTablet) {
+    mobileScore += 25;
+    desktopScore -= 20;
+  }
   
-  const isMobile = mobileScore > desktopScore && mobileScore > 40;
+  // Lower the threshold for mobile detection
+  const isMobile = (hasMobileUA && hasTouch) || // Strong indicator
+                   (mobileScore > desktopScore && mobileScore > 25) || // Lowered from 40
+                   (isIPad) || // iPads are mobile
+                   (isLargeTablet); // Large tablets are mobile
   
-  return {
+  const result = {
     isMobile,
     mobileScore,
     desktopScore,
@@ -109,15 +134,28 @@ export const isMobileDevice = () => {
       hasMultiTouch,
       isDesktopPlatform,
       screenWidth,
-      screenHeight
+      screenHeight,
+      isIPad,
+      isLargeTablet
     }
   };
+  
+  // Cache the result
+  cachedResult = result;
+  lastCheckTime = now;
+  
+  return result;
 };
 
 export const blockDesktopAccess = () => {
-  const { isMobile, mobileScore, desktopScore, details } = isMobileDevice();
+  // Prevent multiple blocks
+  if (hasBlocked) return false;
+  
+  const { isMobile, mobileScore, desktopScore, details } = isMobileDevice(true);
   
   if (!isMobile) {
+    hasBlocked = true;
+    
     // Clear everything
     document.body.innerHTML = '';
     document.body.style.margin = '0';
@@ -190,6 +228,8 @@ export const blockDesktopAccess = () => {
       
       Detection Details:
       • Mobile UA: ${details.hasMobileUA ? '✅' : '❌'}
+      • iPad Detected: ${details.isIPad ? '✅' : '❌'}
+      • Large Tablet: ${details.isLargeTablet ? '✅' : '❌'}
       • Touch Support: ${details.hasTouch ? '✅' : '❌'}
       • Mobile Screen: ${details.isMobileScreen ? '✅' : '❌'}
       • Tall Aspect: ${details.isMobileAspectRatio ? '✅' : '❌'}
@@ -230,15 +270,9 @@ export const blockDesktopAccess = () => {
           <span style="color: #94a3b8;">Detected:</span>
           <strong style="color: #fbbf24;">Desktop Environment</strong>
         </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-          <span style="color: #94a3b8;">Screen:</span>
-          <strong style="color: #fbbf24;">${details.screenWidth} x ${details.screenHeight}</strong>
-        </div>
+
       </div>
-      
-      <div style="color: #64748b; font-size: 11px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-family: monospace; text-align: left; white-space: pre-line;">
-        ${detectionDetails}
-      </div>
+
     `;
 
     overlay.appendChild(content);
@@ -270,30 +304,35 @@ export const startMobileMonitoring = () => {
   let checkCount = 0;
   
   const monitorInterval = setInterval(() => {
-    const currentWidth = window.innerWidth;
-    const currentHeight = window.innerHeight;
-    
-    // If dimensions changed significantly
-    if (Math.abs(currentWidth - lastWidth) > 50 || Math.abs(currentHeight - lastHeight) > 50) {
-      checkCount++;
+    // Don't monitor if already blocked
+    if (!hasBlocked) {
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
       
-      // If multiple size changes detected (likely resizing in devtools)
-      if (checkCount > 3) {
-        blockDesktopAccess();
+      // If dimensions changed significantly
+      if (Math.abs(currentWidth - lastWidth) > 50 || Math.abs(currentHeight - lastHeight) > 50) {
+        checkCount++;
+        
+        // If multiple size changes detected (likely resizing in devtools)
+        if (checkCount > 3) {
+          blockDesktopAccess();
+        }
+        
+        lastWidth = currentWidth;
+        lastHeight = currentHeight;
       }
-      
-      lastWidth = currentWidth;
-      lastHeight = currentHeight;
     }
   }, 500);
   
   // Also check for devtools detection
   const devtoolsInterval = setInterval(() => {
-    const widthThreshold = window.outerWidth - window.innerWidth > 160;
-    const heightThreshold = window.outerHeight - window.innerHeight > 160;
-    
-    if (widthThreshold || heightThreshold) {
-      blockDesktopAccess();
+    if (!hasBlocked) {
+      const widthThreshold = window.outerWidth - window.innerWidth > 160;
+      const heightThreshold = window.outerHeight - window.innerHeight > 160;
+      
+      if (widthThreshold || heightThreshold) {
+        blockDesktopAccess();
+      }
     }
   }, 1000);
   
@@ -302,4 +341,23 @@ export const startMobileMonitoring = () => {
     clearInterval(monitorInterval);
     clearInterval(devtoolsInterval);
   };
+};
+
+// Helper function to log detection results for debugging
+export const logMobileDetection = () => {
+  const result = isMobileDevice(true);
+  console.log('Mobile Detection Results:', {
+    isMobile: result.isMobile,
+    mobileScore: result.mobileScore,
+    desktopScore: result.desktopScore,
+    details: result.details
+  });
+  return result;
+};
+
+// Reset function for testing
+export const resetMobileDetection = () => {
+  hasBlocked = false;
+  cachedResult = null;
+  lastCheckTime = 0;
 };

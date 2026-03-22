@@ -1,50 +1,57 @@
 // src/components/MobileOnly.jsx
-import React, { useEffect, useState } from 'react';
-import { isMobileDevice, startMobileMonitoring } from '../utils/mobileCheck';
+import React, { useEffect, useState, useRef } from 'react';
+import { isMobileDevice, startMobileMonitoring, blockDesktopAccess } from '../utils/mobileCheck';
 import './MobileWarning.css';
 
 function MobileOnly({ children }) {
   const [isMobile, setIsMobile] = useState(true);
-  const [checkCount, setCheckCount] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+  const hasShownWarning = useRef(false);
+  const checkInterval = useRef(null);
 
   useEffect(() => {
-    const checkDevice = () => {
-      const { isMobile } = isMobileDevice();
-      setIsMobile(isMobile);
+    // Initial check with a slight delay to avoid hydration issues
+    const initialCheck = setTimeout(() => {
+      const { isMobile: mobile } = isMobileDevice(true);
+      setIsMobile(mobile);
       
-      if (!isMobile) {
-        setCheckCount(prev => prev + 1);
+      // If not mobile, show warning
+      if (!mobile && !hasShownWarning.current) {
+        hasShownWarning.current = true;
+        setShowWarning(true);
+        blockDesktopAccess(); // Use the direct block function
       }
-    };
-
-    // Initial check
-    checkDevice();
-
-    // Check frequently (prevents devtools manipulation)
-    const interval = setInterval(checkDevice, 500);
-
-    // Start continuous monitoring
-    startMobileMonitoring();
-
-    // Monitor for devtools
-    const devtoolsInterval = setInterval(() => {
-      const widthDiff = window.outerWidth - window.innerWidth;
-      const heightDiff = window.outerHeight - window.innerHeight;
-      
-      // If devtools is open (typical sizes)
-      if (widthDiff > 100 || heightDiff > 100) {
-        setIsMobile(false);
+    }, 100);
+    
+    // Set up periodic checking but less frequently
+    checkInterval.current = setInterval(() => {
+      if (!hasShownWarning.current) {
+        const { isMobile: mobile } = isMobileDevice();
+        setIsMobile(mobile);
+        
+        if (!mobile && !hasShownWarning.current) {
+          hasShownWarning.current = true;
+          setShowWarning(true);
+          blockDesktopAccess();
+        }
       }
-    }, 1000);
-
+    }, 2000); // Check every 2 seconds instead of 500ms
+    
+    // Start continuous monitoring (this has its own intervals)
+    const cleanupMonitoring = startMobileMonitoring();
+    
+    // Cleanup
     return () => {
-      clearInterval(interval);
-      clearInterval(devtoolsInterval);
+      clearTimeout(initialCheck);
+      if (checkInterval.current) {
+        clearInterval(checkInterval.current);
+      }
+      cleanupMonitoring();
     };
   }, []);
-
-  // If multiple desktop detections, block permanently
-  if (!isMobile || checkCount > 5) {
+  
+  // If warning should be shown
+  if (showWarning || !isMobile) {
     return (
       <div className="mobile-only-overlay">
         <div className="mobile-only-card">
@@ -53,10 +60,6 @@ function MobileOnly({ children }) {
           <p className="message">
             WinTap Games is exclusively designed for mobile devices.
           </p>
-          
-          <div className="detection-warning">
-            ⚠️ Desktop access detected ({checkCount})
-          </div>
           
           <div className="instruction-box">
             <div className="instruction-content">
@@ -73,22 +76,12 @@ function MobileOnly({ children }) {
           <div className="url-box">
             <span className="url-value">{window.location.host}</span>
           </div>
-
-          <div className="device-details">
-            <div className="detail-row">
-              <span>Status:</span>
-              <strong className="blocked">BLOCKED</strong>
-            </div>
-            <div className="detail-row">
-              <span>Screen:</span>
-              <strong>{window.innerWidth} x {window.innerHeight}</strong>
-            </div>
-          </div>
         </div>
       </div>
     );
   }
-
+  
+  // If mobile, render children
   return children;
 }
 
