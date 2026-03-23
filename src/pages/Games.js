@@ -18,13 +18,14 @@ function Games({ user }) {
   // SECRET KEY - must match the one in your Phaser game
   const SECRET_KEY = 'my-super-secret-key-123';
 
-  const GAME_URL_BASE = 'http://localhost:8080';
+  const GAME_URL_BASE = 'https://flappy-games.onrender.com';
 
   // Game URLs
   const GAME_URLS = {
     'flappy-bird': `${GAME_URL_BASE}/flappy-bird`,
     'space-shooter': `${GAME_URL_BASE}/space-shooter`,
-    'ball-crush': `${GAME_URL_BASE}/ball-crush`
+    'ball-crush': `${GAME_URL_BASE}/ball-crush`,
+    'checkers': `${GAME_URL_BASE}/checkers`
   };
 
   // Navigation items for bottom bar
@@ -51,7 +52,7 @@ function Games({ user }) {
       featured: true
     },
     {
-      id: 'Checkers',
+      id: 'checkers',
       title: 'Checkers',
       description: 'Classic checkers game. Test your strategy and win!',
       image: '♟️',
@@ -467,9 +468,9 @@ function Games({ user }) {
                 <button
                   className={`btn-play-game ${game.featured ? 'featured-game' : ''}`}
                   onClick={() => handlePlayGame(game)}
-                  disabled={balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id)}
+                  disabled={balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush', 'checkers'].includes(game.id)}
                 >
-                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush'].includes(game.id)
+                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush', 'checkers'].includes(game.id)
                     ? `Need ${formatCurrency(game.entryFee)}`
                     : `Play ${game.title}`}
                 </button>
