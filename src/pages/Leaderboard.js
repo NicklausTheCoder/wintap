@@ -176,11 +176,7 @@ function Leaderboard({ user }) {
           <h1>🏆 Leaderboard</h1>
           <p>Top players competing for the biggest prizes</p>
         </div>
-        {user && (
-          <Link to="/dashboard" className="back-to-dashboard">
-            ← Back
-          </Link>
-        )}
+    
       </header>
 
       {/* Main Content */}

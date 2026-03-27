@@ -1,10 +1,9 @@
-// Dashboard.jsx
+// Dashboard.jsx - Fixed
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { ref, onValue, off, set, get } from 'firebase/database';
 import { auth, database } from '../firebase';
-import { getUserProfile, getWalletBalance } from './../utils/databaseHelpers';
 import './Dashboard.css';
 
 function Dashboard({ user }) {
@@ -19,6 +18,7 @@ function Dashboard({ user }) {
     totalBonus: 0,
     totalLost: 0
   });
+  const [winnings, setWinnings] = useState({ total: 0, count: 0 });
   const [recentGames, setRecentGames] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,8 +28,7 @@ function Dashboard({ user }) {
     { path: '/games', icon: '🎮', label: 'Games' },
     { path: '/wallet', icon: '💰', label: 'Wallet' },
     { path: '/profile', icon: '👤', label: 'Profile' },
-    { path: '/leaderboard', icon: '🏆', label: 'Rank' },
-    { path: '/logout', icon: '🚪', label: 'Logout', action: 'logout' }
+    { path: '/leaderboard', icon: '🏆', label: 'Rank' }
   ];
 
   useEffect(() => {
@@ -38,26 +37,17 @@ function Dashboard({ user }) {
       return;
     }
 
-    // Load user data from correct paths based on your database structure
-    const userRef = ref(database, `users/${user.uid}`);
+    // Load user data
     const profileRef = ref(database, `user_profiles/${user.uid}`);
-    const walletRef = ref(database, `wallets/${user.uid}`); // Fixed: using wallets/ path
-    const gamesRef = ref(database, `users/${user.uid}/games`); // Games are under users/${uid}/games
+    const walletRef = ref(database, `wallets/${user.uid}`);
+    const gamesRef = ref(database, `users/${user.uid}/games`);
+    const winningsRef = ref(database, `winnings/${user.uid}`);
 
     // Listen to wallet changes
     const walletUnsubscribe = onValue(walletRef, (snapshot) => {
       if (snapshot.exists()) {
         setWallet(snapshot.val());
-      } else {
-        // If wallet doesn't exist in wallets/, check users/${uid}/wallet as fallback
-        const userWalletRef = ref(database, `users/${user.uid}/wallet`);
-        get(userWalletRef).then((userWalletSnapshot) => {
-          if (userWalletSnapshot.exists()) {
-            setWallet(userWalletSnapshot.val());
-          }
-        });
       }
-      setLoading(false);
     });
 
     // Listen to profile changes
@@ -67,7 +57,14 @@ function Dashboard({ user }) {
       }
     });
 
-    // Load recent games from users/${uid}/games
+    // Load winnings
+    const winningsUnsubscribe = onValue(winningsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setWinnings(snapshot.val());
+      }
+    });
+
+    // Load recent games
     const gamesUnsubscribe = onValue(gamesRef, (snapshot) => {
       if (snapshot.exists()) {
         const games = [];
@@ -75,98 +72,21 @@ function Dashboard({ user }) {
           const gameData = gameSnapshot.val();
           games.push({ 
             id: gameSnapshot.key, 
-            ...gameData,
-            // Add derived fields for display
-            totalEarnings: gameData.totalWins * 10 || 0, // Example calculation
-            bestScore: gameData.highScore || 0
+            ...gameData
           });
         });
         setRecentGames(games);
       }
+      setLoading(false);
     });
 
     return () => {
       walletUnsubscribe();
       profileUnsubscribe();
+      winningsUnsubscribe();
       gamesUnsubscribe();
     };
   }, [user?.uid, navigate]);
-
-  const initializeUserData = async () => {
-    try {
-      const userId = user.uid;
-      
-      // Check if wallet exists in wallets/
-      const walletRef = ref(database, `wallets/${userId}`);
-      const walletSnapshot = await get(walletRef);
-      
-      if (!walletSnapshot.exists()) {
-        // Check if wallet exists in users/${userId}/wallet
-        const userWalletRef = ref(database, `users/${userId}/wallet`);
-        const userWalletSnapshot = await get(userWalletRef);
-        
-        if (userWalletSnapshot.exists()) {
-          // Migrate wallet data to wallets/ path
-          await set(walletRef, userWalletSnapshot.val());
-        } else {
-          // Create new wallet
-          await set(walletRef, {
-            balance: 0,
-            totalDeposited: 0,
-            totalWithdrawn: 0,
-            totalWon: 0,
-            totalLost: 0,
-            totalBonus: 0,
-            currency: 'USD',
-            lastUpdated: new Date().toISOString(),
-            isActive: true
-          });
-        }
-      }
-
-      // Check if profile exists
-      const profileRef = ref(database, `user_profiles/${userId}`);
-      const profileSnapshot = await get(profileRef);
-      
-      if (!profileSnapshot.exists()) {
-        // Check if profile data exists in users/${userId}/public
-        const userPublicRef = ref(database, `users/${userId}/public`);
-        const userPublicSnapshot = await get(userPublicRef);
-        
-        if (userPublicSnapshot.exists()) {
-          const publicData = userPublicSnapshot.val();
-          await set(profileRef, {
-            displayName: publicData.displayName || 'Player',
-            avatar: publicData.avatar || 'default',
-            rank: publicData.globalRank || 'Bronze',
-            level: publicData.globalLevel || 1,
-            experience: 0,
-            joinDate: publicData.createdAt || new Date().toISOString(),
-            totalGames: 0,
-            totalWins: 0,
-            totalLosses: 0,
-            winStreak: 0
-          });
-        } else {
-          // Create new profile
-          await set(profileRef, {
-            displayName: user.displayName || user.email?.split('@')[0] || 'Player',
-            avatar: 'default',
-            rank: 'Bronze',
-            level: 1,
-            experience: 0,
-            joinDate: new Date().toISOString(),
-            totalGames: 0,
-            totalWins: 0,
-            totalLosses: 0,
-            winStreak: 0
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error initializing user data:', error);
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -193,11 +113,6 @@ function Dashboard({ user }) {
     }).format(amount || 0);
   };
 
-  // Calculate total winnings from wallet
-  const getTotalWinnings = () => {
-    return (wallet?.totalWon || 0) - (wallet?.totalLost || 0);
-  };
-
   if (!user) {
     return <div className="loading-container">Redirecting...</div>;
   }
@@ -218,9 +133,8 @@ function Dashboard({ user }) {
         <div className="welcome-section">
           <div className="welcome-text">
             <h1>Welcome back, {profile?.displayName?.split(' ')[0] || 'Player'}!</h1>
-        
           </div>
-         
+    
         </div>
       </header>
 
@@ -239,27 +153,27 @@ function Dashboard({ user }) {
           <div className="stat-card">
             <div className="stat-icon">🏆</div>
             <div className="stat-details">
-              <h3>Total Won</h3>
-              <p className="stat-value">{formatCurrency(wallet?.totalWon || 0)}</p>
+              <h3>Total Winnings</h3>
+              <p className="stat-value">{formatCurrency(winnings.total || 0)}</p>
             </div>
           </div>
           
           <div className="stat-card">
-            <div className="stat-icon">📈</div>
+            <div className="stat-icon">📥</div>
             <div className="stat-details">
-              <h3>Net Profit</h3>
-              <p className="stat-value">{formatCurrency(getTotalWinnings())}</p>
+              <h3>Deposited</h3>
+              <p className="stat-value">{formatCurrency(wallet?.totalDeposited || 0)}</p>
             </div>
           </div>
           
           <div className="stat-card">
             <div className="stat-icon">🎮</div>
             <div className="stat-details">
-              <h3>Games</h3>
+              <h3>Games Played</h3>
               <p className="stat-value">{profile?.totalGames || 0}</p>
               <div className="stat-sublabel">
-                <span className="wins">🏆 {profile?.totalWins || 0}</span>
-                <span className="losses">💔 {profile?.totalLosses || 0}</span>
+                <span className="wins">🏆 Wins: {profile?.totalWins || 0}</span>
+                <span className="losses">💔 Losses: {profile?.totalLosses || 0}</span>
               </div>
             </div>
           </div>
@@ -279,6 +193,7 @@ function Dashboard({ user }) {
             <div className="rank-details">
               <span className="rank-name">{profile?.rank || 'Rookie'}</span>
               <span className="level">Level {profile?.level || 1}</span>
+              <span className="win-rate">Win Rate: {calculateWinRate()}%</span>
             </div>
           </div>
           <div className="xp-bar">
@@ -311,7 +226,7 @@ function Dashboard({ user }) {
         {/* Recent Games */}
         <div className="recent-games">
           <div className="section-header">
-            <h2>Game Stats</h2>
+            <h2 className='text-white'>Game Stats</h2>
             <Link to="/games" className="view-all">View All →</Link>
           </div>
           
@@ -324,6 +239,7 @@ function Dashboard({ user }) {
                       {game.id === 'flappy-bird' && '🐦'}
                       {game.id === 'space-shooter' && '🚀'}
                       {game.id === 'ball-crush' && '⚽'}
+                      {game.id === 'checkers' && '♟️'}
                     </span>
                     <h4>{game.id?.replace('-', ' ') || 'Game'}</h4>
                   </div>
@@ -341,7 +257,7 @@ function Dashboard({ user }) {
                       <span>{game.highScore || 0}</span>
                     </div>
                   </div>
-                  <Link to={`/games/${game.id}`} className="game-play-link">
+                  <Link to="/games" className="game-play-link">
                     Play →
                   </Link>
                 </div>
@@ -366,21 +282,21 @@ function Dashboard({ user }) {
               <h4>Flappy Bird</h4>
               <p>Classic arcade</p>
               <p className="prize">Win up to $50</p>
-              <Link to="/games/flappy-bird" className="play-mini">Play →</Link>
+              <Link to="/games" className="play-mini">Play →</Link>
             </div>
             <div className="game-mini-card">
-              <div className="game-mini-icon">🚀</div>
-              <h4>Space Shooter</h4>
-              <p>1v1 battles</p>
+              <div className="game-mini-icon">♟️</div>
+              <h4>Checkers</h4>
+              <p>Strategy game</p>
               <p className="prize">Win up to $100</p>
-              <Link to="/games/space-shooter" className="play-mini">Play →</Link>
+              <Link to="/games" className="play-mini">Play →</Link>
             </div>
             <div className="game-mini-card">
               <div className="game-mini-icon">⚽</div>
               <h4>Ball Crush</h4>
               <p>Arcade action</p>
               <p className="prize">Win up to $75</p>
-              <Link to="/games/ball-crush" className="play-mini">Play →</Link>
+              <Link to="/games" className="play-mini">Play →</Link>
             </div>
           </div>
         </div>
@@ -388,30 +304,20 @@ function Dashboard({ user }) {
 
       {/* Bottom Navigation */}
       <nav className="bottom-nav">
-        {navItems.map((item) => {
-          if (item.action === 'logout') {
-            return (
-              <button
-                key={item.path}
-                onClick={handleLogout}
-                className="nav-item logout-btn"
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <span className="nav-label">{item.label}</span>
-              </button>
-            );
-          }
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-            </Link>
-          );
-        })}
+        {navItems.map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+          </Link>
+        ))}
+        <button onClick={handleLogout} className="nav-item logout-nav-btn">
+          <span className="nav-icon">🚪</span>
+          <span className="nav-label">Logout</span>
+        </button>
       </nav>
     </div>
   );

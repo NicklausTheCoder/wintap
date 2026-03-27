@@ -17,7 +17,8 @@ body {
   flex-direction: column;
   min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  padding-bottom: 70px; /* Space for bottom nav */
+  padding-bottom: 70px;
+  /* Space for bottom nav */
   position: relative;
 }
 
@@ -131,20 +132,75 @@ body {
   transform: scale(0.96);
 }
 
-/* Stats Grid */
+/* Games.css - Update stats-grid section */
+
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+  margin-bottom: 30px;
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  padding: 16px;
-  border: 1px solid rgba(255, 215, 0, 0.1);
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.stat-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.stat-value.won {
+  color: #28a745;
+}
+
+.stat-value.lost {
+  color: #dc3545;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  
+  .stat-value {
+    font-size: 18px;
+  }
+  
+  .stat-card h4 {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .stat-card .stat-icon {
@@ -306,8 +362,15 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .game-prize-info {
@@ -319,19 +382,25 @@ body {
   margin-bottom: 12px;
 }
 
-.entry-fee, .prize-pool, .roi {
+.entry-fee,
+.prize-pool,
+.roi {
   text-align: center;
   flex: 1;
 }
 
-.entry-fee span, .prize-pool span, .roi span {
+.entry-fee span,
+.prize-pool span,
+.roi span {
   display: block;
   font-size: 9px;
   color: #94a3b8;
   margin-bottom: 2px;
 }
 
-.entry-fee strong, .prize-pool strong, .roi strong {
+.entry-fee strong,
+.prize-pool strong,
+.roi strong {
   font-size: 14px;
   color: #fff;
 }
@@ -380,7 +449,6 @@ body {
   color: #64748b;
 }
 
-/* How to Play Section */
 .how-to-play {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
@@ -393,43 +461,75 @@ body {
 .how-to-play h3 {
   font-size: 18px;
   color: #fff;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   text-align: center;
 }
 
 .steps {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .step {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+      margin-bottom: 30px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
 }
 
-.step-number {
-  width: 32px;
-  height: 32px;
-  background: #fbbf24;
-  border-radius: 50%;
+.step:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.step:first-child {
+  padding-top: 0;
+}
+
+.step-icon {
+  font-size: 28px;
+  min-width: 44px;
+  height: 44px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 8px;
+}
+
+.step-number {
+  position: absolute;
+  top: 10px;
+  left: 30px;
+  width: 16px;
+  height: 16px;
+  background: #fbbf24;
+  border-radius: 50%;
+  font-size: 9px;
   font-weight: bold;
   color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .step h4 {
-  font-size: 14px;
+  font-size: 15px;
   color: #fff;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  font-weight: 600;
 }
 
 .step p {
-  font-size: 10px;
+  font-size: 12px;
   color: #94a3b8;
-  line-height: 1.3;
+  line-height: 1.4;
+  margin: 0;
 }
 
 /* Bottom Navigation */
@@ -496,7 +596,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */
@@ -504,11 +606,11 @@ body {
   .games-page {
     padding-bottom: 0;
   }
-  
+
   .bottom-nav {
     display: none;
   }
-  
+
   .games-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

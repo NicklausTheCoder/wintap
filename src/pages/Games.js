@@ -1,10 +1,9 @@
-// Games.jsx
+// Games.jsx - Fixed with correct winnings
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ref, onValue, off, set, get, update } from 'firebase/database';
 import { database } from '../firebase';
 import CryptoJS from 'crypto-js';
-import { getUserProfile, getWalletBalance } from './../utils/databaseHelpers'; // Import utility functions
 import './Games.css';
 
 function Games({ user }) {
@@ -12,14 +11,24 @@ function Games({ user }) {
   const [balance, setBalance] = useState(0);
   const [wallet, setWallet] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [winnings, setWinnings] = useState({ total: 0, count: 0 });
+  const [gameStats, setGameStats] = useState({
+    totalGames: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    winRate: 0,
+    bestStreak: 0,
+    totalSpent: 0
+  });
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
 
   // SECRET KEY - must match the one in your Phaser game
   const SECRET_KEY = 'my-super-secret-key-123';
 
-  const GAME_URL_BASE = 'https://flappy-games.onrender.com';
-
+  // const GAME_URL_BASE = 'https://flappy-games.onrender.com';
+  const GAME_URL_BASE = 'http://localhost:8080';
+  
   // Game URLs
   const GAME_URLS = {
     'flappy-bird': `${GAME_URL_BASE}/flappy-bird`,
@@ -43,7 +52,7 @@ function Games({ user }) {
       title: 'Flappy Bird',
       description: 'Navigate through pipes. Classic arcade game with cash rewards.',
       image: '🐦',
-      entryFee: 5,
+      entryFee: 0,
       prize: 50,
       players: 1234,
       difficulty: 'Medium',
@@ -56,7 +65,7 @@ function Games({ user }) {
       title: 'Checkers',
       description: 'Classic checkers game. Test your strategy and win!',
       image: '♟️',
-      entryFee: 5,
+      entryFee: 0,
       prize: 50,
       players: 892,
       difficulty: 'Hard',
@@ -69,7 +78,7 @@ function Games({ user }) {
       title: 'Ball Crush',
       description: 'Crush balls and score points in this addictive arcade game.',
       image: '⚽',
-      entryFee: 3,
+      entryFee: 0,
       prize: 30,
       players: 756,
       difficulty: 'Easy',
@@ -112,50 +121,93 @@ function Games({ user }) {
     }
   };
 
-  // Load REAL wallet balance from database - FIXED PATH
+  // Load user game statistics
+  const loadGameStats = async (userId) => {
+    try {
+      const userGamesRef = ref(database, `users/${userId}/games`);
+      const snapshot = await get(userGamesRef);
+      
+      let totalGames = 0;
+      let totalWins = 0;
+      let totalLosses = 0;
+      let totalSpent = 0;
+      let bestStreak = 0;
+
+      if (snapshot.exists()) {
+        const gamesData = snapshot.val();
+        
+        Object.keys(gamesData).forEach(gameId => {
+          const game = gamesData[gameId];
+          totalGames += game.totalGames || 0;
+          totalWins += game.totalWins || 0;
+          totalLosses += game.totalLosses || 0;
+          totalSpent += game.totalSpent || 0;
+          bestStreak = Math.max(bestStreak, game.bestWinStreak || 0);
+        });
+      }
+
+      const winRate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0;
+
+      setGameStats({
+        totalGames,
+        totalWins,
+        totalLosses,
+        winRate,
+        bestStreak,
+        totalSpent
+      });
+    } catch (error) {
+      console.error('Error loading game stats:', error);
+    }
+  };
+
+  // Load winnings data
+  const loadWinnings = async (userId) => {
+    try {
+      const winningsRef = ref(database, `winnings/${userId}`);
+      const snapshot = await get(winningsRef);
+      if (snapshot.exists()) {
+        setWinnings(snapshot.val());
+      }
+    } catch (error) {
+      console.error('Error loading winnings:', error);
+    }
+  };
+
+  // Load REAL wallet balance and game stats
   useEffect(() => {
     if (!user?.uid) return;
 
     console.log('🎮 Games page loading for user:', user.uid);
 
-    // Listen to wallet balance in real-time from the correct path: wallets/${userId}
+    // Listen to wallet balance in real-time
     const walletRef = ref(database, `wallets/${user.uid}`);
 
     const unsubscribe = onValue(walletRef, (snapshot) => {
       if (snapshot.exists()) {
         const walletData = snapshot.val();
-        console.log('💰 Wallet loaded from wallets/:', walletData);
+        console.log('💰 Wallet loaded:', walletData);
         setWallet(walletData);
         setBalance(walletData.balance || 0);
       } else {
-        // Fallback: check users/${userId}/wallet
-        console.log('⚠️ No wallet found in wallets/, checking users path...');
-        const userWalletRef = ref(database, `users/${user.uid}/wallet`);
-        get(userWalletRef).then((userWalletSnapshot) => {
-          if (userWalletSnapshot.exists()) {
-            const walletData = userWalletSnapshot.val();
-            console.log('💰 Wallet loaded from users/:', walletData);
-            setWallet(walletData);
-            setBalance(walletData.balance || 0);
-          } else {
-            console.log('⚠️ No wallet found anywhere');
-            setBalance(0);
-          }
-        });
+        console.log('⚠️ No wallet found');
+        setBalance(0);
       }
       setLoading(false);
     });
 
-    // Load user profile using utility function
+    // Load user profile
     const loadProfile = async () => {
-      const profileData = await getUserProfile(user.uid);
-      if (profileData) {
-        setProfile(profileData);
+      const profileRef = ref(database, `user_profiles/${user.uid}`);
+      const profileSnapshot = await get(profileRef);
+      if (profileSnapshot.exists()) {
+        setProfile(profileSnapshot.val());
       }
     };
+    
     loadProfile();
-
-    // Load real-time player counts from database
+    loadGameStats(user.uid);
+    loadWinnings(user.uid);
     loadPlayerCounts();
 
     return () => {
@@ -192,24 +244,21 @@ function Games({ user }) {
       return;
     }
 
-    // For Flappy Bird and Space Shooter, redirect without fee check
-    if (game.id === 'flappy-bird' || game.id === 'space-shooter' || game.id === 'ball-crush') {
+    // For free games, redirect without fee check
+    if (game.entryFee === 0) {
       await redirectToGame(game);
       return;
     }
 
-    // For other games, check balance
+    // Check balance for paid games
     if (balance < game.entryFee) {
       alert(`Insufficient balance! You need $${game.entryFee} to play.`);
       return;
     }
 
     try {
-      // Deduct entry fee from wallet - using correct path: wallets/${user.uid}
+      // Deduct entry fee from wallet
       const walletRef = ref(database, `wallets/${user.uid}`);
-      const newBalance = balance - game.entryFee;
-
-      // Get current wallet data first
       const walletSnapshot = await get(walletRef);
       const currentWallet = walletSnapshot.exists() ? walletSnapshot.val() : {
         balance: 0,
@@ -221,9 +270,10 @@ function Games({ user }) {
         currency: 'USD'
       };
 
-      // Update with new balance
-      await set(walletRef, {
-        ...currentWallet,
+      const newBalance = currentWallet.balance - game.entryFee;
+
+      // Update wallet
+      await update(walletRef, {
         balance: newBalance,
         totalLost: (currentWallet.totalLost || 0) + game.entryFee,
         lastUpdated: new Date().toISOString()
@@ -242,15 +292,15 @@ function Games({ user }) {
         timestamp: new Date().toISOString()
       });
 
-      // Update game stats in users/${uid}/games/${gameId}
+      // Update game stats
       const gameStatsRef = ref(database, `users/${user.uid}/games/${game.id}`);
       const statsSnapshot = await get(gameStatsRef);
 
       if (statsSnapshot.exists()) {
         const currentStats = statsSnapshot.val();
-        await set(gameStatsRef, {
-          ...currentStats,
+        await update(gameStatsRef, {
           totalGames: (currentStats.totalGames || 0) + 1,
+          totalLosses: (currentStats.totalLosses || 0) + 1,
           lastPlayed: new Date().toISOString(),
           totalSpent: (currentStats.totalSpent || 0) + game.entryFee
         });
@@ -258,16 +308,12 @@ function Games({ user }) {
         await set(gameStatsRef, {
           totalGames: 1,
           totalWins: 0,
-          totalLosses: 0,
+          totalLosses: 1,
           highScore: 0,
           totalEarnings: 0,
           totalSpent: game.entryFee,
           lastPlayed: new Date().toISOString(),
-          gamesWon: 0,
-          gamesLost: 0,
-          rank: 'Rookie',
-          level: 1,
-          experience: 0
+          bestWinStreak: 0
         });
       }
 
@@ -276,6 +322,9 @@ function Games({ user }) {
       const playersSnapshot = await get(activePlayersRef);
       const currentPlayers = playersSnapshot.exists() ? playersSnapshot.val() : game.players;
       await set(activePlayersRef, currentPlayers + 1);
+
+      // Refresh game stats
+      await loadGameStats(user.uid);
 
       // Redirect to game
       await redirectToGame(game);
@@ -289,7 +338,7 @@ function Games({ user }) {
   // Redirect to game with encrypted user data
   const redirectToGame = async (game) => {
     try {
-      // Get user data from Firebase - from users/${uid} path
+      // Get user data
       const userRef = ref(database, `users/${user.uid}`);
       const userSnapshot = await get(userRef);
 
@@ -391,26 +440,37 @@ function Games({ user }) {
           <Link to="/wallet" className="add-funds-btn">+ Add Funds</Link>
         </div>
 
-        {/* Quick Stats */}
+        {/* Game Stats - Shows correct winnings from wallet */}
         <div className="stats-grid">
           <div className="stat-card">
+            <div className="stat-icon">🎮</div>
+            <h4>Games Played</h4>
+            <p className="stat-value">{gameStats.totalGames}</p>
+          </div>
+          <div className="stat-card">
             <div className="stat-icon">🏆</div>
-            <h4>Total Won</h4>
-            <p className="stat-value won">{formatCurrency(wallet?.totalWon || 0)}</p>
+            <h4>Games Won</h4>
+            <p className="stat-value won">{gameStats.totalWins}</p>
           </div>
           <div className="stat-card">
             <div className="stat-icon">💔</div>
-            <h4>Total Lost</h4>
-            <p className="stat-value lost">{formatCurrency(wallet?.totalLost || 0)}</p>
+            <h4>Games Lost</h4>
+            <p className="stat-value lost">{gameStats.totalLosses}</p>
           </div>
           <div className="stat-card">
             <div className="stat-icon">📊</div>
             <h4>Win Rate</h4>
-            <p className="stat-value">
-              {wallet?.totalWon && wallet?.totalLost
-                ? Math.round((wallet.totalWon / (wallet.totalWon + wallet.totalLost)) * 100)
-                : 0}%
-            </p>
+            <p className="stat-value">{gameStats.winRate}%</p>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">⭐</div>
+            <h4>Best Streak</h4>
+            <p className="stat-value">{gameStats.bestStreak}</p>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">💵</div>
+            <h4>Total Winnings</h4>
+            <p className="stat-value won">{formatCurrency(winnings.total)}</p>
           </div>
         </div>
 
@@ -451,33 +511,31 @@ function Games({ user }) {
                 <div className="game-prize-info">
                   <div className="entry-fee">
                     <span>Entry</span>
-                    <strong>{formatCurrency(game.entryFee)}</strong>
+                    <strong>$1</strong>
                   </div>
                   <div className="prize-pool">
                     <span>Prize</span>
                     <strong>{formatCurrency(game.prize)}</strong>
                   </div>
                   <div className="roi">
-                    <span>ROI</span>
-                    <strong className={game.prize > game.entryFee ? 'positive' : 'negative'}>
-                      {Math.round((game.prize / game.entryFee) * 100 - 100)}%
-                    </strong>
+                    <span>Players</span>
+                    <strong>{game.players.toLocaleString()}</strong>
                   </div>
                 </div>
 
                 <button
                   className={`btn-play-game ${game.featured ? 'featured-game' : ''}`}
                   onClick={() => handlePlayGame(game)}
-                  disabled={balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush', 'checkers'].includes(game.id)}
+                  disabled={balance < game.entryFee && game.entryFee > 0}
                 >
-                  {balance < game.entryFee && !['flappy-bird', 'space-shooter', 'ball-crush', 'checkers'].includes(game.id)
+                  {balance < game.entryFee && game.entryFee > 0
                     ? `Need ${formatCurrency(game.entryFee)}`
                     : `Play ${game.title}`}
                 </button>
 
                 <div className="game-footer">
                   <span>🏆 Guaranteed Prize</span>
-                  <span>⏱️ 2 min</span>
+                  <span>⏱️ 2 min games</span>
                 </div>
               </div>
             </div>
@@ -489,24 +547,24 @@ function Games({ user }) {
           <h3>How to Play & Win</h3>
           <div className="steps">
             <div className="step">
-              <span className="step-number">1</span>
+              <div className="step-icon">💳</div>
               <h4>Add Funds</h4>
-              <p>Deposit to your wallet</p>
+              <p>Deposit to your wallet to get started</p>
             </div>
             <div className="step">
-              <span className="step-number">2</span>
+              <div className="step-icon">🎮</div>
               <h4>Choose Game</h4>
-              <p>Select any game</p>
+              <p>Pick from our selection of games</p>
             </div>
             <div className="step">
-              <span className="step-number">3</span>
+              <div className="step-icon">🏆</div>
               <h4>Play & Win</h4>
-              <p>Compete for prizes</p>
+              <p>Compete against others for prizes</p>
             </div>
             <div className="step">
-              <span className="step-number">4</span>
+              <div className="step-icon">💸</div>
               <h4>Withdraw</h4>
-              <p>Get your winnings</p>
+              <p>Cash out your winnings instantly</p>
             </div>
           </div>
         </div>

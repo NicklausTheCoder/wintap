@@ -21,6 +21,10 @@ body {
   position: relative;
 }
 
+.text-white {
+  color: #fff;
+}
+
 /* Header */
 .dashboard-header {
   background: rgba(255, 255, 255, 0.05);
@@ -180,7 +184,7 @@ body {
 }
 
 .section-header h2 {
-  font-size: 16px;
+
   color: #fff;
 }
 
@@ -633,5 +637,93 @@ body {
   .quick-actions,
   .popular-games {
     margin-bottom: 16px;
+  }
+}/* Add to both Dashboard.css and Leaderboard.css */
+
+/* Header logout button */
+.welcome-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.logout-header-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.logout-header-btn:hover {
+  background: rgba(220, 53, 69, 0.8);
+  border-color: #dc3545;
+}
+
+/* Bottom nav logout button */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 215, 0, 0.2);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: #94a3b8;
+  font-size: 10px;
+  gap: 4px;
+  padding: 4px 0;
+  flex: 1;
+  transition: color 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-item.active {
+  color: #fbbf24;
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-icon {
+  font-size: 20px;
+  transition: transform 0.2s;
+}
+
+.logout-nav-btn:hover {
+  color: #dc3545;
+}
+
+/* Header actions */
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
   }
 }
