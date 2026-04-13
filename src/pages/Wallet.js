@@ -1,13 +1,16 @@
-// Wallet.jsx - FIXED version
-import React, { useState, useEffect } from 'react';
+// Wallet.jsx - Paynow integrated via own backend (mobile/EcoCash, no external redirect)
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ref, get, set, update, push, onValue } from 'firebase/database';
 import { database } from '../firebase';
 import './Wallet.css';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'https://game-server-xvdu.onrender.com';
+
 function Wallet({ user }) {
   const location = useLocation();
-  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const pollIntervalRef = useRef(null);
+
   const [wallet, setWallet] = useState({
     balance: 0,
     totalDeposited: 0,
@@ -16,570 +19,290 @@ function Wallet({ user }) {
     totalLost: 0,
     totalBonus: 0,
     currency: 'USD',
-    lastUpdated: null
+    lastUpdated: null,
   });
 
-
-  const [winnings, setWinnings] = useState({
-    total: 0,
-    count: 0
-  });
-
-  // Load winnings data
-  useEffect(() => {
-    if (!user) return;
-
-    const winningsRef = ref(database, `winnings/${user.uid}`);
-    get(winningsRef).then((snapshot) => {
-      if (snapshot.exists()) {
-        setWinnings(snapshot.val());
-      }
-    });
-  }, [user]);
+  const [winnings, setWinnings] = useState({ total: 0, count: 0 });
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Deposit state
   const [depositAmount, setDepositAmount] = useState('');
+  const [depositPhone, setDepositPhone] = useState('');
+  const [depositMethod, setDepositMethod] = useState('ecocash'); // 'ecocash' | 'innbucks' | 'web'
+
+  // Withdraw state
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [ecocashNumber, setEcocashNumber] = useState('');
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
-  const [message, setMessage] = useState({ text: '', type: '' });
-  const [processingPayment, setProcessingPayment] = useState(false);
-  const [processedPayments, setProcessedPayments] = useState(new Set());
 
-  // Navigation items for bottom bar
+  // Payment flow state
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState(null); // { reference, pollUrl, amount, method }
+  const [pollStatus, setPollStatus] = useState(''); // 'polling' | 'paid' | 'failed' | ''
+  const [message, setMessage] = useState({ text: '', type: '' });
+
   const navItems = [
     { path: '/dashboard', icon: '📊', label: 'Home' },
     { path: '/games', icon: '🎮', label: 'Games' },
     { path: '/wallet', icon: '💰', label: 'Wallet' },
     { path: '/profile', icon: '👤', label: 'Profile' },
-    { path: '/leaderboard', icon: '🏆', label: 'Rank' }
+    { path: '/leaderboard', icon: '🏆', label: 'Rank' },
   ];
 
-  // Load wallet data and listen for real-time updates
-  useEffect(() => {
-    console.log('🔥 useEffect - user:', user?.uid);
-    if (!user) {
-      console.log('❌ No user found');
-      return;
-    }
+  // ── Load wallet & winnings ────────────────────────────────────────────────
 
-    console.log('📦 Loading wallet for user:', user.uid);
+  useEffect(() => {
+    if (!user) return;
+
     const walletRef = ref(database, `wallets/${user.uid}`);
     const unsubscribe = onValue(walletRef, (snapshot) => {
-      console.log('💰 Wallet snapshot received:', snapshot.exists());
       if (snapshot.exists()) {
-        const walletData = snapshot.val();
-        console.log('✅ Wallet data:', walletData);
-        setWallet(walletData);
+        setWallet(snapshot.val());
       } else {
-        console.log('⚠️ No wallet found, initializing...');
         initializeWallet();
       }
       setLoading(false);
-    }, (error) => {
-      console.error('❌ Error loading wallet:', error);
+    });
+
+    get(ref(database, `winnings/${user.uid}`)).then((snap) => {
+      if (snap.exists()) setWinnings(snap.val());
     });
 
     loadTransactions();
-
-    return () => {
-      console.log('🧹 Cleaning up wallet listener');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [user]);
 
-// Check for payment result in URL - SIMPLIFIED VERSION
-useEffect(() => {
-  const params = new URLSearchParams(location.search);
-  const reference = params.get('reference');
-  const status = params.get('status');
-  const processed = params.get('processed');
+  // ── Resume pending payment on mount (e.g. user refreshed mid-poll) ────────
 
-  if (reference && status && !processed) {
-    console.log('📨 Payment return detected:', reference);
-    
-    // Mark URL as processed immediately to prevent reprocessing on refresh/back
-    const newUrl = `/wallet?reference=${reference}&status=${status}&processed=true`;
-    window.history.replaceState({}, document.title, newUrl);
-
-    if (status === 'success' || status === 'returned') {
-      setMessage({
-        text: `✅ Payment detected! Verifying...`,
-        type: 'success'
-      });
-      
-      // Call single verification function (we'll create this next)
-      verifyPayment(reference);
-      
-    } else if (status === 'failed') {
-      setMessage({
-        text: `❌ Payment failed. Please try again.`,
-        type: 'error'
-      });
+  useEffect(() => {
+    if (!user) return;
+    const stored = sessionStorage.getItem(`pending_payment_${user.uid}`);
+    if (stored) {
+      try {
+        const p = JSON.parse(stored);
+        setPendingPayment(p);
+        setPollStatus('polling');
+        setMessage({ text: `⏳ Waiting for payment confirmation (${p.method.toUpperCase()})…`, type: 'info' });
+        startPolling(p);
+      } catch (_) {}
     }
-  }
-}, [location.search]); // Only depend on search params, not the whole location object
+  }, [user]);
+
+  // ── Cleanup polling on unmount ────────────────────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   const initializeWallet = async () => {
-    console.log('🏦 Initializing wallet for user:', user?.uid);
-    try {
-      const walletRef = ref(database, `wallets/${user.uid}`);
-      const initialWallet = {
-        balance: 0,
-        totalDeposited: 0,
-        totalWithdrawn: 0,
-        totalWon: 0,
-        totalLost: 0,
-        totalBonus: 0,
-        currency: 'USD',
-        lastUpdated: new Date().toISOString(),
-        isActive: true
-      };
-      console.log('📝 Setting initial wallet:', initialWallet);
-      await set(walletRef, initialWallet);
-      setWallet(initialWallet);
-      console.log('✅ Wallet initialized successfully');
-    } catch (error) {
-      console.error('❌ Error initializing wallet:', error);
-    }
+    const initial = {
+      balance: 0, totalDeposited: 0, totalWithdrawn: 0,
+      totalWon: 0, totalLost: 0, totalBonus: 0,
+      currency: 'USD', lastUpdated: new Date().toISOString(), isActive: true,
+    };
+    await set(ref(database, `wallets/${user.uid}`), initial);
+    setWallet(initial);
   };
 
   const loadTransactions = async () => {
-    console.log('📋 Loading transactions for user:', user?.uid);
     try {
-      const transactionsRef = ref(database, `transactions/${user.uid}`);
-      const snapshot = await get(transactionsRef);
-
-      if (snapshot.exists()) {
-        const transactionsData = [];
-        snapshot.forEach((child) => {
-          transactionsData.push({
-            id: child.key,
-            ...child.val()
-          });
-        });
-
-        transactionsData.sort((a, b) =>
-          new Date(b.timestamp) - new Date(a.timestamp)
-        );
-
-        console.log(`✅ Loaded ${transactionsData.length} transactions`);
-        setTransactions(transactionsData.slice(0, 10));
-      } else {
-        console.log('📭 No transactions found');
-      }
-    } catch (error) {
-      console.error('❌ Error loading transactions:', error);
+      const snap = await get(ref(database, `transactions/${user.uid}`));
+      if (!snap.exists()) return;
+      const list = [];
+      snap.forEach((c) => list.push({ id: c.key, ...c.val() }));
+      list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setTransactions(list.slice(0, 10));
+    } catch (e) {
+      console.error('loadTransactions error:', e);
     }
   };
 
   const addTransaction = async (type, amount, description, balance, metadata = {}) => {
-    console.log('➕ Adding transaction:', { type, amount, description });
-    try {
-      const transactionsRef = ref(database, `transactions/${user.uid}`);
-      const newTransactionRef = push(transactionsRef);
-
-      const transaction = {
-        type,
-        amount,
-        balance,
-        description,
-        status: 'completed',
-        timestamp: new Date().toISOString(),
-        currency: 'USD',
-        ...metadata
-      };
-
-      await set(newTransactionRef, transaction);
-      await loadTransactions();
-
-      console.log('✅ Transaction added successfully');
-      return transaction;
-    } catch (error) {
-      console.error('❌ Error adding transaction:', error);
-      throw error;
-    }
-  };
-
-  const generatePaymentReference = () => {
-    const reference = `PAY_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    console.log('🔢 Generated payment reference:', reference);
-    return reference;
-  };
-
-  const generateWithdrawalReference = () => {
-    const reference = `WTH_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    console.log('🔢 Generated withdrawal reference:', reference);
-    return reference;
-  };
-
-  const savePendingTransaction = async (amount, reference, apiResponse) => {
-    console.log('💾 Saving pending transaction:', { amount, reference });
-    try {
-      const transactionsRef = ref(database, `transactions/${user.uid}`);
-      const newTransactionRef = push(transactionsRef);
-
-      await set(newTransactionRef, {
-        type: 'deposit_pending',
-        amount: amount,
-        balance: wallet.balance,
-        description: `Pending deposit of $${amount} (Ref: ${reference})`,
-        status: 'pending',
-        paymentReference: reference,
-        apiResponse: apiResponse,
-        timestamp: new Date().toISOString(),
-        currency: 'USD'
-      });
-
-      await loadTransactions();
-      console.log('✅ Pending transaction saved');
-    } catch (error) {
-      console.error('❌ Error saving pending transaction:', error);
-    }
-  };
-
-  // Validate Ecocash number
-  const validateEcocashNumber = (number) => {
-    // Zimbabwe Ecocash format: 077XXXXXXX or 078XXXXXXX
-    const cleaned = number.replace(/\s+/g, '');
-    const regex = /^(07[7-8][0-9]{7})$/;
-    return regex.test(cleaned);
-  };
-
-  // Format Ecocash number for display
-  const formatEcocashNumber = (number) => {
-    const cleaned = number.replace(/\s+/g, '');
-    if (cleaned.length === 10) {
-      return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
-    }
-    return number;
-  };
-
-// SINGLE FUNCTION to handle payment verification
-const verifyPayment = async (reference) => {
-  console.log('🔍 Verifying payment:', reference, 'Session:', sessionId);
-
-  // Add window lock to prevent multiple calls
-  if (window.verifyingPayments && window.verifyingPayments[reference]) {
-    console.log('🔒 Already verifying this payment');
-    return;
-  }
-  
-  window.verifyingPayments = window.verifyingPayments || {};
-  window.verifyingPayments[reference] = true;
-
-  try {
-    // Check local state
-    if (processedPayments.has(reference)) {
-      console.log('⏭️ Already processed in this session');
-      return;
-    }
-
-    // Check Firebase - is payment already completed?
-    const paymentRef = ref(database, `payments/${reference}`);
-    const paymentSnapshot = await get(paymentRef);
-    
-    if (!paymentSnapshot.exists()) {
-      console.log('❌ Payment not found');
-      return;
-    }
-
-    const payment = paymentSnapshot.val();
-    
-    // If already completed, stop
-    if (payment.status === 'completed') {
-      console.log('✅ Payment already completed');
-      setProcessedPayments(prev => new Set([...prev, reference]));
-      return;
-    }
-
-    // If another session is processing, wait and check
-    if (payment.processingStarted && payment.processedBy !== sessionId) {
-      console.log('⏳ Another session is processing, waiting...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      const checkAgain = await get(paymentRef);
-      if (checkAgain.exists() && checkAgain.val().status === 'completed') {
-        console.log('✅ Other session completed it');
-        setProcessedPayments(prev => new Set([...prev, reference]));
-        return;
-      }
-    }
-
-    // Mark as processing in Firebase (atomic)
-    await update(paymentRef, {
-      processingStarted: true,
-      processingStartedAt: new Date().toISOString(),
-      processedBy: sessionId
+    const newRef = push(ref(database, `transactions/${user.uid}`));
+    await set(newRef, {
+      type, amount, balance, description,
+      status: 'completed',
+      timestamp: new Date().toISOString(),
+      currency: 'USD',
+      ...metadata,
     });
+    await loadTransactions();
+  };
 
-    // Get poll URL
-    const pollRef = ref(database, `payment_polls/${reference}`);
-    const pollSnapshot = await get(pollRef);
-    
-    if (!pollSnapshot.exists()) {
-      console.log('❌ No poll URL found');
-      return;
-    }
+  const validateZimPhone = (number) => {
+    const cleaned = number.replace(/\s+/g, '');
+    return /^(07[3-8][0-9]{7})$/.test(cleaned);
+  };
 
-    const pollData = pollSnapshot.val();
+  const formatPhone = (number) => {
+    const c = number.replace(/\s+/g, '');
+    return c.length === 10 ? `${c.slice(0, 3)} ${c.slice(3, 6)} ${c.slice(6)}` : number;
+  };
 
-    // Call Laravel to verify with Paynow
-    console.log('🌐 Calling Laravel verify API');
-    const response = await fetch('https://wintap.webiconic.co.zw/public/api/paynow/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        poll_url: pollData.pollUrl,
-        reference: reference
-      })
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount || 0);
+
+  const formatDate = (ts) => {
+    if (!ts) return 'N/A';
+    return new Date(ts).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     });
+  };
 
-    const result = await response.json();
-    console.log('📥 Verification result:', result);
+  const showMsg = (text, type = 'info', autoClear = 0) => {
+    setMessage({ text, type });
+    if (autoClear) setTimeout(() => setMessage({ text: '', type: '' }), autoClear);
+  };
 
-    if (result.success && result.paid) {
-      // ONE FINAL CHECK before updating wallet
-      const finalCheck = await get(paymentRef);
-      if (finalCheck.exists() && finalCheck.val().status === 'completed') {
-        console.log('⏭️ Payment was just completed');
-        return;
-      }
+  // ── Polling logic ─────────────────────────────────────────────────────────
 
-      // Update wallet
-      const walletRef = ref(database, `wallets/${user.uid}`);
-      const walletSnapshot = await get(walletRef);
-      
-      if (walletSnapshot.exists()) {
-        const currentWallet = walletSnapshot.val();
-        const newBalance = currentWallet.balance + payment.amount;
+  const startPolling = (payment) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
-        await update(walletRef, {
-          balance: newBalance,
-          totalDeposited: (currentWallet.totalDeposited || 0) + payment.amount,
-          lastUpdated: new Date().toISOString()
-        });
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40; // ~2 minutes at 3s interval
 
-        // Add transaction
-        await addTransaction(
-          'deposit',
-          payment.amount,
-          `Deposit of $${payment.amount} (Ref: ${reference})`,
-          newBalance,
-          { paymentReference: reference }
+    pollIntervalRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/paynow/poll?pollUrl=${encodeURIComponent(payment.pollUrl)}&userId=${user.uid}&plan=wallet_deposit&billingCycle=once&amount=${payment.amount}&reference=${payment.reference}`
         );
+        const data = await res.json();
 
-        // Mark payment as completed
-        await update(paymentRef, {
-          status: 'completed',
-          verifiedAt: new Date().toISOString(),
-          completedBy: sessionId
-        });
+        if (data.paid) {
+          clearInterval(pollIntervalRef.current);
+          sessionStorage.removeItem(`pending_payment_${user.uid}`);
+          setPendingPayment(null);
+          setPollStatus('paid');
+          setProcessingPayment(false);
+          showMsg(`✅ $${payment.amount} added to your wallet!`, 'success', 8000);
+          await loadTransactions();
+          return;
+        }
 
-        // Update poll status
-        await update(pollRef, { status: 'completed' });
-
-        setMessage({
-          text: `✅ $${payment.amount} added to your wallet!`,
-          type: 'success'
-        });
-
-        setProcessedPayments(prev => new Set([...prev, reference]));
-        console.log('✅ Payment complete!');
+        if (attempts >= MAX_ATTEMPTS) {
+          clearInterval(pollIntervalRef.current);
+          sessionStorage.removeItem(`pending_payment_${user.uid}`);
+          setPendingPayment(null);
+          setPollStatus('failed');
+          setProcessingPayment(false);
+          showMsg('⏰ Payment timed out. If you approved the prompt, please contact support.', 'error', 10000);
+        }
+      } catch (err) {
+        console.error('Poll error:', err);
+        if (attempts >= MAX_ATTEMPTS) {
+          clearInterval(pollIntervalRef.current);
+          setProcessingPayment(false);
+          setPollStatus('failed');
+          showMsg('❌ Could not verify payment. Please contact support.', 'error', 10000);
+        }
       }
-    } else {
-      console.log('⏳ Payment not yet confirmed:', result.message);
-    }
+    }, 3000);
+  };
 
-  } catch (error) {
-    console.error('❌ Verification error:', error);
-  } finally {
-    // Remove lock
-    if (window.verifyingPayments) {
-      delete window.verifyingPayments[reference];
-    }
-  }
-};
+  const cancelPendingPayment = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    sessionStorage.removeItem(`pending_payment_${user.uid}`);
+    setPendingPayment(null);
+    setPollStatus('');
+    setProcessingPayment(false);
+    setMessage({ text: '', type: '' });
+  };
 
-  // FIXED: verifyPaymentWithAPI with atomic transaction
-
+  // ── Deposit handler ───────────────────────────────────────────────────────
 
   const handleDeposit = async (e) => {
     e.preventDefault();
-    console.log('💰 handleDeposit called', { depositAmount, user: user?.uid });
-
-    // Prevent double-submission
-    if (processingPayment) {
-      console.log('⏭️ Already processing a payment');
-      return;
-    }
+    if (processingPayment) return;
 
     const amount = parseFloat(depositAmount);
-    console.log('📊 Parsed amount:', amount);
-
-    if (amount <= 0) {
-      console.log('❌ Invalid amount:', amount);
-      setMessage({ text: 'Please enter a valid amount', type: 'error' });
+    if (!amount || amount < 1) {
+      showMsg('❌ Minimum deposit is $1', 'error');
       return;
     }
 
-    if (amount < 1) {
-      console.log('❌ Amount too low:', amount);
-      setMessage({ text: 'Minimum deposit is $1', type: 'error' });
-      return;
-    }
+    const phone = depositPhone.replace(/\s+/g, '');
 
-    // Generate unique payment reference
-    const paymentReference = generatePaymentReference();
-
-    // Prepare payment data to send to API
-    const paymentData = {
-      amount: amount,
-      currency: 'USD',
-      reference: paymentReference,
-      description: 'Wallet Deposit',
-
-      // User details
-      user: {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || 'Player',
-        phone: user.phoneNumber || null
-      },
-
-      // URLs for Paynow to redirect
-      returnUrl: `${window.location.origin}/wallet?reference=${paymentReference}&status=returned`,
-      resultUrl: `${window.location.origin}/api/payment-result`,
-
-      // Additional metadata
-      metadata: {
-        source: 'web',
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent
+    if (depositMethod !== 'web') {
+      if (!phone) {
+        showMsg('❌ Please enter your mobile number', 'error');
+        return;
       }
-    };
-
-    console.log('📦 Payment data prepared:', paymentData);
+      if (!validateZimPhone(phone)) {
+        showMsg('❌ Invalid Zimbabwe number. Use format: 077 123 4567', 'error');
+        return;
+      }
+    }
 
     setProcessingPayment(true);
-    setMessage({ text: '⏳ Processing payment...', type: 'info' });
+    setPollStatus('polling');
+    showMsg(`⏳ Sending ${depositMethod === 'web' ? 'payment request' : `${depositMethod.toUpperCase()} prompt`} to ${depositMethod !== 'web' ? formatPhone(phone) : 'Paynow'}…`, 'info');
 
     try {
-      // Make API call to your backend
-      const apiUrl = 'https://wintap.webiconic.co.zw/public/api/paynow/initiate';
-      console.log('🌐 Making API call to:', apiUrl);
-
-      const response = await fetch(apiUrl, {
+      const res = await fetch(`${API_BASE}/api/paynow/create`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(paymentData),
-        signal: AbortSignal.timeout(30000)
-      });
-
-      console.log('📥 API response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API error response:', errorText);
-        throw new Error(`API responded with status ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('📥 API Response:', result);
-
-      // Check if payment was successful
-      if (result.success && result.redirect_url) {
-        console.log('✅ Payment initiated successfully');
-
-        // 1. STORE PAYMENT IN FIREBASE
-        const paymentRecord = {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
           email: user.email,
+          phone,
+          plan: 'wallet_deposit',
+          billingCycle: 'once',
           userId: user.uid,
-          amount: amount,
-          reference: paymentReference,
-          pollUrl: result.poll_url,
-          redirectUrl: result.redirect_url,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          paymentMethod: 'paynow',
-          metadata: {
-            apiResponse: result,
-            userAgent: navigator.userAgent
-          }
-        };
+          method: depositMethod,
+        }),
+      });
 
-        console.log('💾 Saving payment to Firebase:', paymentRecord);
+      const data = await res.json();
 
-        // Save to Firebase payments collection
-        const paymentsRef = ref(database, `payments/${paymentReference}`);
-        await set(paymentsRef, {
-          ...paymentRecord,
-          processingStarted: false,  // ADD THIS
-          processedBy: null           // ADD THIS
-        });
-        console.log('✅ Payment saved to payments/');
-
-        // Also save under user's payments for easy lookup
-        const userPaymentRef = ref(database, `users/${user.uid}/payments/${paymentReference}`);
-        await set(userPaymentRef, {
-          reference: paymentReference,
-          amount: amount,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-        console.log('✅ Payment saved to user payments/');
-
-        // 2. SAVE PENDING TRANSACTION
-        await savePendingTransaction(amount, paymentReference, result);
-
-        // 3. STORE POLL URL FOR LATER CHECKING
-        const pollRef = ref(database, `payment_polls/${paymentReference}`);
-        await set(pollRef, {
-          pollUrl: result.poll_url,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        });
-        console.log('✅ Poll URL saved');
-
-        setMessage({
-          text: `✅ Payment initiated! Redirecting to Paynow...`,
-          type: 'success'
-        });
-
-        // 4. REDIRECT TO PAYNOW AFTER SHORT DELAY
-        console.log('🚀 Redirecting to:', result.redirect_url);
-        setTimeout(() => {
-          window.location.href = result.redirect_url;
-        }, 1500);
-
-      } else {
-        console.error('❌ Payment initiation failed:', result);
-        throw new Error(result.message || 'Payment initiation failed');
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to initiate payment');
       }
 
-    } catch (error) {
-      console.error('❌ API call failed:', error);
+      // Web redirect (USSD/browser flow)
+      if (data.redirectUrl && depositMethod === 'web') {
+        // Save pending so we can resume on return
+        const pending = { reference: data.reference, pollUrl: data.pollUrl, amount, method: 'web' };
+        sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+        window.location.href = data.redirectUrl;
+        return;
+      }
 
-      setMessage({
-        text: `❌ Payment failed: ${error.message}`,
-        type: 'error'
-      });
+      // Mobile (EcoCash / InnBucks) — poll in-page
+      const pending = {
+        reference: data.reference,
+        pollUrl: data.pollUrl,
+        amount,
+        method: depositMethod,
+        phone: formatPhone(phone),
+      };
+      setPendingPayment(pending);
+      sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+      showMsg(
+        `📱 USSD prompt sent to ${formatPhone(phone)}. Please approve it on your phone. Checking…`,
+        'info'
+      );
+      startPolling(pending);
+    } catch (err) {
+      console.error('Deposit error:', err);
       setProcessingPayment(false);
+      setPollStatus('');
+      showMsg(`❌ ${err.message}`, 'error', 8000);
     }
   };
 
+  // ── Withdraw handler (unchanged logic, credits winnings) ─────────────────
+
   const handleWithdrawClick = () => {
-    console.log('👆 Withdraw button clicked');
-    // Check minimum winnings BEFORE showing form
     if (winnings.total < 5) {
-      setMessage({
-        text: '❌ Minimum withdrawal amount is $5. You need to win more games first.',
-        type: 'error'
-      });
+      showMsg('❌ Minimum withdrawal is $5 from winnings.', 'error');
       return;
     }
     setShowWithdrawForm(true);
@@ -588,199 +311,88 @@ const verifyPayment = async (reference) => {
   };
 
   const handleWithdrawCancel = () => {
-    console.log('👆 Withdraw cancelled');
     setShowWithdrawForm(false);
     setWithdrawAmount('');
     setEcocashNumber('');
     setMessage({ text: '', type: '' });
   };
 
-  // FIXED: No API call, just save to Firebase
-  // FIXED: Withdraw from winnings only, with $5 minimum
   const handleWithdraw = async (e) => {
     e.preventDefault();
-    console.log('💸 handleWithdraw called', {
-      withdrawAmount,
-      ecocashNumber,
-      winnings: winnings.total
-    });
+    if (processingPayment) return;
 
     const amount = parseFloat(withdrawAmount);
-    console.log('📊 Parsed amount:', amount);
+    if (!amount || amount < 5) { showMsg('❌ Minimum withdrawal is $5', 'error'); return; }
+    if (amount > winnings.total) { showMsg(`❌ Only ${formatCurrency(winnings.total)} available in winnings`, 'error'); return; }
 
-    // Validate amount
-    if (amount <= 0) {
-      console.log('❌ Invalid amount:', amount);
-      setMessage({ text: 'Please enter a valid amount', type: 'error' });
-      return;
-    }
-
-    // Check minimum withdrawal ($5)
-    if (amount < 5) {
-      console.log('❌ Amount below minimum: $5');
-      setMessage({ text: '❌ Minimum withdrawal amount is $5', type: 'error' });
-      return;
-    }
-
-    // Check against WINNINGS, not balance
-    if (amount > winnings.total) {
-      console.log('❌ Insufficient winnings:', { amount, winnings: winnings.total });
-      setMessage({ text: `❌ You only have ${formatCurrency(winnings.total)} in winnings`, type: 'error' });
-      return;
-    }
-
-    // Validate Ecocash number
-    if (!ecocashNumber) {
-      console.log('❌ No Ecocash number provided');
-      setMessage({ text: '❌ Please enter your Ecocash number', type: 'error' });
-      return;
-    }
-
-    if (!validateEcocashNumber(ecocashNumber)) {
-      console.log('❌ Invalid Ecocash number:', ecocashNumber);
-      setMessage({
-        text: '❌ Invalid Ecocash number. Please enter a valid 10-digit number starting with 077 or 078',
-        type: 'error'
-      });
-      return;
-    }
+    const phone = ecocashNumber.replace(/\s+/g, '');
+    if (!phone) { showMsg('❌ Enter your Ecocash number', 'error'); return; }
+    if (!validateZimPhone(phone)) { showMsg('❌ Invalid Ecocash number (10 digits, starts with 077/078)', 'error'); return; }
 
     setProcessingPayment(true);
-    setMessage({ text: '⏳ Processing withdrawal request...', type: 'info' });
+    showMsg('⏳ Processing withdrawal…', 'info');
 
     try {
-      // Generate withdrawal reference
-      const withdrawalReference = generateWithdrawalReference();
+      const withdrawalRef = `WTH_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-      console.log('📦 Saving withdrawal to Firebase:', withdrawalReference);
+      const walletSnap = await get(ref(database, `wallets/${user.uid}`));
+      const current = walletSnap.val();
+      const newBalance = current.balance - amount;
 
-      // Update wallet - subtract from balance AND mark winnings as withdrawn
-      const walletRef = ref(database, `wallets/${user.uid}`);
-      const newBalance = wallet.balance - amount;
-      const newTotalWithdrawn = (wallet.totalWithdrawn || 0) + amount;
-
-      console.log('💵 New balance:', newBalance);
-
-      await update(walletRef, {
+      await update(ref(database, `wallets/${user.uid}`), {
         balance: newBalance,
-        totalWithdrawn: newTotalWithdrawn,
-        lastUpdated: new Date().toISOString()
+        totalWithdrawn: (current.totalWithdrawn || 0) + amount,
+        lastUpdated: new Date().toISOString(),
       });
-
-      // Also update winnings to show they've been withdrawn
-      const winningsRef = ref(database, `winnings/${user.uid}`);
-      await update(winningsRef, {
+      await update(ref(database, `winnings/${user.uid}`), {
         total: (winnings.total || 0) - amount,
-        lastWithdrawn: new Date().toISOString()
+        lastWithdrawn: new Date().toISOString(),
       });
 
-      // Add transaction record
       await addTransaction(
-        'withdrawal',
-        -amount,
-        `Withdrawal of $${amount} from winnings to Ecocash ${formatEcocashNumber(ecocashNumber)} (Ref: ${withdrawalReference})`,
+        'withdrawal', -amount,
+        `Withdrawal of $${amount} to Ecocash ${formatPhone(phone)} (Ref: ${withdrawalRef})`,
         newBalance,
-        {
-          withdrawalReference: withdrawalReference,
-          ecocashNumber: ecocashNumber.replace(/\s+/g, '')
-        }
+        { withdrawalReference: withdrawalRef, ecocashNumber: phone }
       );
 
-      // Store withdrawal record with Ecocash details for manual processing
-      const withdrawalRef = ref(database, `withdrawals/${withdrawalReference}`);
-      await set(withdrawalRef, {
-        userId: user.uid,
-        email: user.email,
-        amount: amount,
-        reference: withdrawalReference,
-        ecocashNumber: ecocashNumber.replace(/\s+/g, ''),
-        formattedEcocashNumber: formatEcocashNumber(ecocashNumber),
+      await set(ref(database, `withdrawals/${withdrawalRef}`), {
+        userId: user.uid, email: user.email, amount,
+        reference: withdrawalRef,
+        ecocashNumber: phone,
+        formattedEcocashNumber: formatPhone(phone),
         status: 'pending',
         createdAt: new Date().toISOString(),
-        notes: `Withdrawal of winnings to Ecocash ${formatEcocashNumber(ecocashNumber)}`
-      });
-      console.log('✅ Withdrawal record saved to Firebase');
-
-      // Also save under user's withdrawals
-      const userWithdrawalRef = ref(database, `users/${user.uid}/withdrawals/${withdrawalReference}`);
-      await set(userWithdrawalRef, {
-        reference: withdrawalReference,
-        amount: amount,
-        ecocashNumber: ecocashNumber.replace(/\s+/g, ''),
-        status: 'pending',
-        createdAt: new Date().toISOString()
       });
 
-      // Refresh winnings
       const updatedWinnings = await get(ref(database, `winnings/${user.uid}`));
-      if (updatedWinnings.exists()) {
-        setWinnings(updatedWinnings.val());
-      }
+      if (updatedWinnings.exists()) setWinnings(updatedWinnings.val());
 
-      setMessage({
-        text: `✅ Withdrawal request for $${amount} from your winnings to ${formatEcocashNumber(ecocashNumber)} submitted! Our team will process it within 24 hours.`,
-        type: 'success'
-      });
-
-      // Reset form
+      setShowWithdrawForm(false);
       setWithdrawAmount('');
       setEcocashNumber('');
-      setShowWithdrawForm(false);
-
-    } catch (error) {
-      console.error('❌ Withdrawal error:', error);
-      setMessage({
-        text: `❌ Withdrawal failed: ${error.message}`,
-        type: 'error'
-      });
+      showMsg(`✅ Withdrawal of $${amount} to ${formatPhone(phone)} submitted! Processing within 24 hours.`, 'success', 10000);
+    } catch (err) {
+      console.error('Withdraw error:', err);
+      showMsg(`❌ Withdrawal failed: ${err.message}`, 'error', 8000);
     } finally {
       setProcessingPayment(false);
-      console.log('🏁 Withdrawal processing completed');
-      setTimeout(() => setMessage({ text: '', type: '' }), 8000);
     }
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount || 0);
-  };
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
-    console.log('⏳ Loading state');
     return (
       <div className="loading-container">
         <div className="loading-spinner"></div>
-        <p>Loading your wallet...</p>
+        <p>Loading your wallet…</p>
       </div>
     );
   }
 
-  console.log('🎨 Rendering wallet UI', {
-    processingPayment,
-    message,
-    showWithdrawForm,
-    totalWon: wallet.totalWon
-  });
-
   return (
     <div className="wallet-page">
-      {/* Header */}
       <header className="wallet-header">
         <h1>My Wallet</h1>
         <div className="user-badge">
@@ -789,15 +401,44 @@ const verifyPayment = async (reference) => {
         </div>
       </header>
 
-      {/* Message notification */}
       {message.text && (
-        <div className={`message ${message.type}`}>
-          {message.text}
+        <div className={`message ${message.type}`}>{message.text}</div>
+      )}
+
+      {/* ── Pending payment status banner ── */}
+      {pendingPayment && pollStatus === 'polling' && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #f59e0b',
+          borderRadius: '12px', padding: '16px 20px',
+          margin: '0 16px 16px', display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+        }}>
+          <div>
+            <div style={{ fontWeight: '700', color: '#92400e' }}>
+              ⏳ Awaiting payment confirmation
+            </div>
+            <div style={{ fontSize: '13px', color: '#78350f', marginTop: '4px' }}>
+              {pendingPayment.method !== 'web'
+                ? `Approve the ${pendingPayment.method.toUpperCase()} prompt on ${pendingPayment.phone}`
+                : 'Complete payment in the Paynow window'}
+              {' — '}Ref: <strong>{pendingPayment.reference}</strong>
+            </div>
+          </div>
+          <button
+            onClick={cancelPendingPayment}
+            style={{
+              background: '#dc2626', color: 'white', border: 'none',
+              borderRadius: '8px', padding: '8px 14px',
+              fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            Cancel
+          </button>
         </div>
       )}
 
-      {/* Main Content */}
       <main className="wallet-main">
+
         {/* Balance Card */}
         <div className="balance-card">
           <div className="balance-icon">💰</div>
@@ -808,116 +449,145 @@ const verifyPayment = async (reference) => {
           </div>
           <div className="balance-actions">
             <button
-              onClick={() => {
-                console.log('👆 Deposit button clicked (scroll)');
-                document.getElementById('deposit').scrollIntoView({ behavior: 'smooth' });
-              }}
+              onClick={() => document.getElementById('deposit').scrollIntoView({ behavior: 'smooth' })}
               className="btn-deposit-large"
               disabled={processingPayment}
             >
               + Deposit
             </button>
-
-
             <button
               onClick={handleWithdrawClick}
               className="btn-withdraw-large"
-              disabled={wallet.balance < 5 || processingPayment}
-              title={wallet.balance < 5 ? "Minimum withdrawal is $5" : ""}
+              disabled={winnings.total < 5 || processingPayment}
+              title={winnings.total < 5 ? 'Minimum withdrawal is $5 from winnings' : ''}
             >
               - Withdraw
             </button>
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats */}
         <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon">📥</div>
-            <div className="stat-details">
-              <h4>Total Deposited</h4>
-              <p className="stat-value">{formatCurrency(wallet.totalDeposited || 0)}</p>
+          {[
+            { icon: '📥', label: 'Total Deposited', value: wallet.totalDeposited || 0 },
+            { icon: '📤', label: 'Total Withdrawn', value: wallet.totalWithdrawn || 0 },
+            { icon: '🏆', label: 'Total Winnings', value: winnings.total || 0, green: true },
+            { icon: '🎁', label: 'Bonus Earned', value: wallet.totalBonus || 0 },
+          ].map(({ icon, label, value, green }) => (
+            <div key={label} className="stat-card">
+              <div className="stat-icon">{icon}</div>
+              <div className="stat-details">
+                <h4>{label}</h4>
+                <p className={`stat-value${green ? ' success' : ''}`}>{formatCurrency(value)}</p>
+              </div>
             </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📤</div>
-            <div className="stat-details">
-              <h4>Total Withdrawn</h4>
-              <p className="stat-value">{formatCurrency(wallet.totalWithdrawn || 0)}</p>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">🏆</div>
-            <div className="stat-details">
-              <h4>Total Winnings</h4>
-              <p className="stat-value success">{formatCurrency(winnings.total || 0)}</p>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">🎁</div>
-            <div className="stat-details">
-              <h4>Bonus Earned</h4>
-              <p className="stat-value">{formatCurrency(wallet.totalBonus || 0)}</p>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Wallet Forms */}
+        {/* Forms */}
         <div className="wallet-forms">
+
+          {/* ── Deposit Form ── */}
           <div id="deposit" className="form-card">
             <h3>📥 Deposit Funds</h3>
-            <p className="form-description">Add money to your wallet via Paynow</p>
+            <p className="form-description">Add money instantly via Paynow (EcoCash, InnBucks, or web)</p>
+
             <form onSubmit={handleDeposit}>
+
+              {/* Method selector */}
+              <div className="form-group">
+                <label>Payment Method</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'ecocash', label: '📱 EcoCash' },
+                    { id: 'innbucks', label: '💸 InnBucks' },
+                    { id: 'web', label: '🌐 Web / Card' },
+                  ].map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setDepositMethod(id)}
+                      disabled={processingPayment}
+                      style={{
+                        padding: '8px 16px', borderRadius: '8px', border: 'none',
+                        cursor: 'pointer', fontWeight: '600', fontSize: '13px',
+                        background: depositMethod === id ? '#059669' : '#f3f4f6',
+                        color: depositMethod === id ? 'white' : '#374151',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amount */}
               <div className="form-group">
                 <label>Amount (USD)</label>
                 <div className="amount-input">
                   <span className="currency-symbol">$</span>
                   <input
-                    type="number"
-                    min="1"
-                    step="1"
+                    type="number" min="1" step="1"
                     value={depositAmount}
-                    onChange={(e) => {
-                      console.log('📝 Deposit amount changed:', e.target.value);
-                      setDepositAmount(e.target.value);
-                    }}
+                    onChange={(e) => setDepositAmount(e.target.value)}
                     placeholder="0"
                     required
                     disabled={processingPayment}
                   />
                 </div>
               </div>
+
+              {/* Quick amounts */}
               <div className="quick-amounts">
-                <button type="button" onClick={() => {
-                  console.log('👆 Quick amount: $10');
-                  setDepositAmount('10');
-                }} disabled={processingPayment}>$10</button>
-                <button type="button" onClick={() => {
-                  console.log('👆 Quick amount: $25');
-                  setDepositAmount('25');
-                }} disabled={processingPayment}>$25</button>
-                <button type="button" onClick={() => {
-                  console.log('👆 Quick amount: $50');
-                  setDepositAmount('50');
-                }} disabled={processingPayment}>$50</button>
-                <button type="button" onClick={() => {
-                  console.log('👆 Quick amount: $100');
-                  setDepositAmount('100');
-                }} disabled={processingPayment}>$100</button>
+                {['5', '10', '25', '50', '100'].map((v) => (
+                  <button key={v} type="button"
+                    onClick={() => setDepositAmount(v)}
+                    disabled={processingPayment}
+                  >
+                    ${v}
+                  </button>
+                ))}
               </div>
+
+              {/* Phone number (mobile methods only) */}
+              {depositMethod !== 'web' && (
+                <div className="form-group" style={{ marginTop: '12px' }}>
+                  <label>{depositMethod === 'ecocash' ? 'EcoCash' : 'InnBucks'} Number</label>
+                  <div className="ecocash-input">
+                    <span className="ecocash-icon">📱</span>
+                    <input
+                      type="tel"
+                      value={depositPhone}
+                      onChange={(e) => setDepositPhone(e.target.value.replace(/\D/g, ''))}
+                      placeholder="077 123 4567"
+                      required={depositMethod !== 'web'}
+                      disabled={processingPayment}
+                    />
+                  </div>
+                  <small className="input-hint">10-digit Zimbabwe number (e.g. 0771234567)</small>
+                  {depositPhone && !validateZimPhone(depositPhone) && (
+                    <small className="error-hint">❌ Invalid number</small>
+                  )}
+                </div>
+              )}
+
               <button
                 type="submit"
                 className="btn-deposit"
                 disabled={processingPayment}
+                style={{ marginTop: '12px' }}
               >
-                {processingPayment ? 'Processing...' : `Deposit $${depositAmount || '0'}`}
+                {processingPayment
+                  ? '⏳ Processing…'
+                  : depositMethod === 'web'
+                    ? `Pay $${depositAmount || '0'} via Paynow`
+                    : `Send $${depositAmount || '0'} ${depositMethod.toUpperCase()} Prompt`}
               </button>
             </form>
           </div>
 
+          {/* ── Withdraw Form ── */}
           <div id="withdraw" className="form-card">
             {!showWithdrawForm ? (
               <>
@@ -925,56 +595,41 @@ const verifyPayment = async (reference) => {
                 <p className="form-description">Withdraw your winnings to Ecocash</p>
                 <div className="withdraw-info">
                   <p>💰 Total Balance: <strong>{formatCurrency(wallet.balance || 0)}</strong></p>
-                  <p>🏆 Available Winnings to Withdraw: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
-                  <p className="withdraw-note">(You can only withdraw your winnings, not deposits)</p>
-                  <p>📋 Minimum withdrawal: <strong>$5</strong></p>
-                  <p>⏱️ Processing time: <strong>1 hour</strong></p>
+                  <p>🏆 Available Winnings: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
+                  <p className="withdraw-note">(Only winnings can be withdrawn, not deposits)</p>
+                  <p>📋 Minimum: <strong>$5</strong> · ⏱️ Processing: <strong>~1 hour</strong></p>
                 </div>
-
                 <button
                   onClick={handleWithdrawClick}
                   className="btn-withdraw"
                   disabled={winnings.total < 5 || processingPayment}
                 >
                   {winnings.total < 5
-                    ? `Need $5 in winnings (You have ${formatCurrency(winnings.total)})`
+                    ? `Need $5 in winnings (you have ${formatCurrency(winnings.total)})`
                     : 'Start Withdrawal'}
                 </button>
               </>
             ) : (
               <>
                 <h3>📤 Withdraw Winnings to Ecocash</h3>
-                <p className="form-description">Enter your Ecocash number</p>
                 <div className="withdraw-balance-info">
-                  <p>🏆 Available winnings to withdraw: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
-                  <p className="withdraw-note">(Minimum withdrawal: $5)</p>
+                  <p>🏆 Available: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
+                  <p className="withdraw-note">(Minimum $5)</p>
                 </div>
-
                 <form onSubmit={handleWithdraw}>
                   <div className="form-group">
-                    <label>Amount (USD) - Minimum $5</label>
+                    <label>Amount (USD)</label>
                     <div className="amount-input">
                       <span className="currency-symbol">$</span>
                       <input
-                        type="number"
-                        min="5"
-                        step="1"
-                        max={winnings.total}
+                        type="number" min="5" step="1" max={winnings.total}
                         value={withdrawAmount}
-                        onChange={(e) => {
-                          console.log('📝 Withdraw amount changed:', e.target.value);
-                          setWithdrawAmount(e.target.value);
-                        }}
-                        placeholder="5"
-                        required
-                        disabled={processingPayment}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        placeholder="5" required disabled={processingPayment}
                       />
                     </div>
-                    <small className="input-hint">
-                      Max: {formatCurrency(winnings.total || 0)} (Min: $5)
-                    </small>
+                    <small className="input-hint">Max: {formatCurrency(winnings.total || 0)}</small>
                   </div>
-
                   <div className="form-group">
                     <label>Ecocash Number</label>
                     <div className="ecocash-input">
@@ -982,99 +637,48 @@ const verifyPayment = async (reference) => {
                       <input
                         type="tel"
                         value={ecocashNumber}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
-                          setEcocashNumber(value);
-                        }}
+                        onChange={(e) => setEcocashNumber(e.target.value.replace(/\D/g, ''))}
                         placeholder="077 123 4567"
-                        required
-                        disabled={processingPayment}
+                        required disabled={processingPayment}
                       />
                     </div>
-                    <small className="input-hint">
-                      Enter your 10-digit Ecocash number (e.g., 0771234567)
-                    </small>
-                    {ecocashNumber && !validateEcocashNumber(ecocashNumber) && (
-                      <small className="error-hint">
-                        ❌ Please enter a valid Ecocash number (10 digits starting with 077 or 078)
-                      </small>
+                    <small className="input-hint">10-digit (077 or 078)</small>
+                    {ecocashNumber && !validateZimPhone(ecocashNumber) && (
+                      <small className="error-hint">❌ Invalid number</small>
                     )}
                   </div>
-
                   <div className="quick-amounts">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('👆 Quick withdraw: $5');
-                        setWithdrawAmount('5');
-                      }}
-                      disabled={winnings.total < 5 || processingPayment}
-                    >
-                      $5
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('👆 Quick withdraw: $10');
-                        setWithdrawAmount(Math.min(10, winnings.total).toString());
-                      }}
-                      disabled={winnings.total < 10 || processingPayment}
-                    >
-                      $10
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('👆 Quick withdraw: $25');
-                        setWithdrawAmount(Math.min(25, winnings.total).toString());
-                      }}
-                      disabled={winnings.total < 25 || processingPayment}
-                    >
-                      $25
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('👆 Quick withdraw: $50');
-                        setWithdrawAmount(Math.min(50, winnings.total).toString());
-                      }}
-                      disabled={winnings.total < 50 || processingPayment}
-                    >
-                      $50
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        console.log('👆 Quick withdraw: Max');
-                        setWithdrawAmount(winnings.total.toString());
-                      }}
+                    {[5, 10, 25, 50].map((v) => (
+                      <button key={v} type="button"
+                        onClick={() => setWithdrawAmount(Math.min(v, winnings.total).toString())}
+                        disabled={winnings.total < v || processingPayment}
+                      >
+                        ${v}
+                      </button>
+                    ))}
+                    <button type="button"
+                      onClick={() => setWithdrawAmount(winnings.total.toString())}
                       disabled={winnings.total < 5 || processingPayment}
                     >
                       Max
                     </button>
                   </div>
-
                   <div className="withdraw-actions">
                     <button
-                      type="submit"
-                      className="btn-withdraw"
+                      type="submit" className="btn-withdraw"
                       disabled={
                         processingPayment ||
                         !withdrawAmount ||
                         parseFloat(withdrawAmount) < 5 ||
                         parseFloat(withdrawAmount) > winnings.total ||
                         !ecocashNumber ||
-                        !validateEcocashNumber(ecocashNumber)
+                        !validateZimPhone(ecocashNumber)
                       }
                     >
-                      {processingPayment ? 'Processing...' : 'Request Withdrawal'}
+                      {processingPayment ? 'Processing…' : 'Request Withdrawal'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleWithdrawCancel}
-                      className="btn-cancel"
-                      disabled={processingPayment}
-                    >
+                    <button type="button" onClick={handleWithdrawCancel}
+                      className="btn-cancel" disabled={processingPayment}>
                       Cancel
                     </button>
                   </div>
@@ -1090,38 +694,28 @@ const verifyPayment = async (reference) => {
             <h3>📋 Recent Transactions</h3>
             <Link to="/wallet/history" className="view-all">View All →</Link>
           </div>
-
           {transactions.length > 0 ? (
             <div className="table-responsive">
               <table>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Balance</th>
+                    <th>Date</th><th>Type</th><th>Description</th><th>Amount</th><th>Balance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td>{formatDate(transaction.timestamp)}</td>
+                  {transactions.map((tx) => (
+                    <tr key={tx.id}>
+                      <td>{formatDate(tx.timestamp)}</td>
                       <td>
-                        <span className={`transaction-type ${transaction.type}`}>
-                          {transaction.type === 'deposit' && '📥 Deposit'}
-                          {transaction.type === 'deposit_pending' && '⏳ Pending Deposit'}
-                          {transaction.type === 'withdrawal' && '📤 Withdrawal'}
-                          {transaction.type === 'win' && '🏆 Win'}
-                          {transaction.type === 'loss' && '🎮 Game Entry'}
-                          {transaction.type === 'bonus' && '🎁 Bonus'}
+                        <span className={`transaction-type ${tx.type}`}>
+                          {{ deposit: '📥 Deposit', deposit_pending: '⏳ Pending', withdrawal: '📤 Withdrawal', win: '🏆 Win', loss: '🎮 Entry', bonus: '🎁 Bonus' }[tx.type] || tx.type}
                         </span>
                       </td>
-                      <td>{transaction.description}</td>
-                      <td className={transaction.amount > 0 ? 'deposit' : 'withdraw'}>
-                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount)}
+                      <td>{tx.description}</td>
+                      <td className={tx.amount > 0 ? 'deposit' : 'withdraw'}>
+                        {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
                       </td>
-                      <td>{formatCurrency(transaction.balance)}</td>
+                      <td>{formatCurrency(tx.balance)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1136,14 +730,12 @@ const verifyPayment = async (reference) => {
         </div>
       </main>
 
-      {/* Bottom Navigation */}
       <nav className="bottom-nav">
         {navItems.map((item) => (
           <Link
             key={item.path}
             to={item.path}
             className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-            onClick={() => console.log('👆 Nav item clicked:', item.label)}
           >
             <span className="nav-icon">{item.icon}</span>
             <span>{item.label}</span>
