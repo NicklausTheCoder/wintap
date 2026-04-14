@@ -85,7 +85,7 @@ function Wallet({ user }) {
         setPollStatus('polling');
         setMessage({ text: `⏳ Waiting for payment confirmation (${p.method.toUpperCase()})…`, type: 'info' });
         startPolling(p);
-      } catch (_) {}
+      } catch (_) { }
     }
   }, [user]);
 
@@ -218,86 +218,73 @@ function Wallet({ user }) {
 
   // ── Deposit handler ───────────────────────────────────────────────────────
 
-  const handleDeposit = async (e) => {
-    e.preventDefault();
-    if (processingPayment) return;
+ // ── Deposit handler ───────────────────────────────────────────────────────
 
-    const amount = parseFloat(depositAmount);
-    if (!amount || amount < 1) {
-      showMsg('❌ Minimum deposit is $1', 'error');
+const handleDeposit = async (e) => {
+  e.preventDefault();
+  if (processingPayment) return;
+
+  const amount = parseFloat(depositAmount);
+  if (!amount || amount < 1) {
+    showMsg('❌ Minimum deposit is $1', 'error');
+    return;
+  }
+
+  // Always use 'web' as the method
+  const method = 'web';
+
+  setProcessingPayment(true);
+  setPollStatus('polling');
+  showMsg(`⏳ Sending payment request to Paynow…`, 'info');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/paynow/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount,
+        email: user.email,
+        phone: '', // No phone needed for web
+        plan: 'wallet_deposit',
+        billingCycle: 'once',
+        userId: user.uid,
+        method: 'web',
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to initiate payment');
+    }
+
+    // Web redirect
+    if (data.redirectUrl) {
+      const pending = { reference: data.reference, pollUrl: data.pollUrl, amount, method: 'web' };
+      sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+      window.location.href = data.redirectUrl;
       return;
     }
 
-    const phone = depositPhone.replace(/\s+/g, '');
-
-    if (depositMethod !== 'web') {
-      if (!phone) {
-        showMsg('❌ Please enter your mobile number', 'error');
-        return;
-      }
-      if (!validateZimPhone(phone)) {
-        showMsg('❌ Invalid Zimbabwe number. Use format: 077 123 4567', 'error');
-        return;
-      }
-    }
-
-    setProcessingPayment(true);
-    setPollStatus('polling');
-    showMsg(`⏳ Sending ${depositMethod === 'web' ? 'payment request' : `${depositMethod.toUpperCase()} prompt`} to ${depositMethod !== 'web' ? formatPhone(phone) : 'Paynow'}…`, 'info');
-
-    try {
-      const res = await fetch(`${API_BASE}/api/paynow/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount,
-          email: user.email,
-          phone,
-          plan: 'wallet_deposit',
-          billingCycle: 'once',
-          userId: user.uid,
-          method: depositMethod,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to initiate payment');
-      }
-
-      // Web redirect (USSD/browser flow)
-      if (data.redirectUrl && depositMethod === 'web') {
-        // Save pending so we can resume on return
-        const pending = { reference: data.reference, pollUrl: data.pollUrl, amount, method: 'web' };
-        sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
-        window.location.href = data.redirectUrl;
-        return;
-      }
-
-      // Mobile (EcoCash / InnBucks) — poll in-page
-      const pending = {
-        reference: data.reference,
-        pollUrl: data.pollUrl,
-        amount,
-        method: depositMethod,
-        phone: formatPhone(phone),
-      };
-      setPendingPayment(pending);
-      sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
-      showMsg(
-        `📱 USSD prompt sent to ${formatPhone(phone)}. Please approve it on your phone. Checking…`,
-        'info'
-      );
-      startPolling(pending);
-    } catch (err) {
-      console.error('Deposit error:', err);
-      setProcessingPayment(false);
-      setPollStatus('');
-      showMsg(`❌ ${err.message}`, 'error', 8000);
-    }
-  };
-
+    // Fallback for any other response
+    const pending = {
+      reference: data.reference,
+      pollUrl: data.pollUrl,
+      amount,
+      method: 'web',
+    };
+    setPendingPayment(pending);
+    sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+    showMsg('Complete payment in the Paynow window. Checking…', 'info');
+    startPolling(pending);
+    
+  } catch (err) {
+    console.error('Deposit error:', err);
+    setProcessingPayment(false);
+    setPollStatus('');
+    showMsg(`❌ ${err.message}`, 'error', 8000);
+  }
+};
   // ── Withdraw handler (unchanged logic, credits winnings) ─────────────────
 
   const handleWithdrawClick = () => {
@@ -322,7 +309,7 @@ function Wallet({ user }) {
     if (processingPayment) return;
 
     const amount = parseFloat(withdrawAmount);
-    if (!amount || amount < 5) { showMsg('❌ Minimum withdrawal is $5', 'error'); return; }
+    if (!amount || amount < 3) { showMsg('❌ Minimum withdrawal is $3', 'error'); return; }
     if (amount > winnings.total) { showMsg(`❌ Only ${formatCurrency(winnings.total)} available in winnings`, 'error'); return; }
 
     const phone = ecocashNumber.replace(/\s+/g, '');
@@ -445,7 +432,7 @@ function Wallet({ user }) {
           <div className="balance-info">
             <h2>Current Balance</h2>
             <div className="balance-amount">{formatCurrency(wallet.balance || 0)}</div>
-            <p className="balance-note">Available for play and withdrawal</p>
+            <p className="balance-note">Available for play ONLY</p>
           </div>
           <div className="balance-actions">
             <button
@@ -490,37 +477,9 @@ function Wallet({ user }) {
           {/* ── Deposit Form ── */}
           <div id="deposit" className="form-card">
             <h3>📥 Deposit Funds</h3>
-            <p className="form-description">Add money instantly via Paynow (EcoCash, InnBucks, or web)</p>
+            <p className="form-description">Add money instantly via Paynow (Ecocash/Onemoney/Card)</p>
 
             <form onSubmit={handleDeposit}>
-
-              {/* Method selector */}
-              <div className="form-group">
-                <label>Payment Method</label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'ecocash', label: '📱 EcoCash' },
-                    { id: 'innbucks', label: '💸 InnBucks' },
-                    { id: 'web', label: '🌐 Web / Card' },
-                  ].map(({ id, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setDepositMethod(id)}
-                      disabled={processingPayment}
-                      style={{
-                        padding: '8px 16px', borderRadius: '8px', border: 'none',
-                        cursor: 'pointer', fontWeight: '600', fontSize: '13px',
-                        background: depositMethod === id ? '#059669' : '#f3f4f6',
-                        color: depositMethod === id ? 'white' : '#374151',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {/* Amount */}
               <div className="form-group">
@@ -550,28 +509,6 @@ function Wallet({ user }) {
                 ))}
               </div>
 
-              {/* Phone number (mobile methods only) */}
-              {depositMethod !== 'web' && (
-                <div className="form-group" style={{ marginTop: '12px' }}>
-                  <label>{depositMethod === 'ecocash' ? 'EcoCash' : 'InnBucks'} Number</label>
-                  <div className="ecocash-input">
-                    <span className="ecocash-icon">📱</span>
-                    <input
-                      type="tel"
-                      value={depositPhone}
-                      onChange={(e) => setDepositPhone(e.target.value.replace(/\D/g, ''))}
-                      placeholder="077 123 4567"
-                      required={depositMethod !== 'web'}
-                      disabled={processingPayment}
-                    />
-                  </div>
-                  <small className="input-hint">10-digit Zimbabwe number (e.g. 0771234567)</small>
-                  {depositPhone && !validateZimPhone(depositPhone) && (
-                    <small className="error-hint">❌ Invalid number</small>
-                  )}
-                </div>
-              )}
-
               <button
                 type="submit"
                 className="btn-deposit"
@@ -580,13 +517,10 @@ function Wallet({ user }) {
               >
                 {processingPayment
                   ? '⏳ Processing…'
-                  : depositMethod === 'web'
-                    ? `Pay $${depositAmount || '0'} via Paynow`
-                    : `Send $${depositAmount || '0'} ${depositMethod.toUpperCase()} Prompt`}
+                  : `Pay $${depositAmount || '0'} via Paynow`}
               </button>
             </form>
           </div>
-
           {/* ── Withdraw Form ── */}
           <div id="withdraw" className="form-card">
             {!showWithdrawForm ? (
@@ -597,15 +531,15 @@ function Wallet({ user }) {
                   <p>💰 Total Balance: <strong>{formatCurrency(wallet.balance || 0)}</strong></p>
                   <p>🏆 Available Winnings: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
                   <p className="withdraw-note">(Only winnings can be withdrawn, not deposits)</p>
-                  <p>📋 Minimum: <strong>$5</strong> · ⏱️ Processing: <strong>~1 hour</strong></p>
+                  <p>📋 Minimum: <strong>$3</strong> · ⏱️ Processing: <strong>~1 hour</strong></p>
                 </div>
                 <button
                   onClick={handleWithdrawClick}
                   className="btn-withdraw"
-                  disabled={winnings.total < 5 || processingPayment}
+                  disabled={winnings.total < 3 || processingPayment}
                 >
-                  {winnings.total < 5
-                    ? `Need $5 in winnings (you have ${formatCurrency(winnings.total)})`
+                  {winnings.total < 3
+                    ? `Need $3 in winnings (you have ${formatCurrency(winnings.total)})`
                     : 'Start Withdrawal'}
                 </button>
               </>
