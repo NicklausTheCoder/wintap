@@ -537,21 +537,7 @@
   box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
 }
 
-/* How It Works */
-.how-it-works {
-  max-width: 1200px;
-  margin: 0 auto 30px;
-  background: white;
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
 
-.how-it-works h2 {
-  font-size: 24px;
-  color: #333;
-  margin-bottom: 30px;
-}
 
 .steps-grid {
   display: grid;

@@ -159,7 +159,7 @@ function Login() {
         </button>
 
         <div className="auth-divider">
-          <span>or login with email</span>
+          <span style={{ color: 'white' }}>or login with email</span>
         </div>
         
         <form onSubmit={handleSubmit}>
@@ -188,12 +188,14 @@ function Login() {
           </div>
           
           <div className="form-options">
-            <label className="remember-me">
-              <input type="checkbox" /> Remember me
+            <label  style={{ color: 'white' }} className="remember-me">
+              <input  type="checkbox" /> Remember me
             </label>
-            <Link to="/forgot-password" className="forgot-password">
+                <p className="auth-link">
+            <Link   to="/forgot-password" >
               Forgot Password?
             </Link>
+            </p>
           </div>
           
           <button type="submit" disabled={loading} className="auth-button">
@@ -210,7 +212,7 @@ function Login() {
         </p>
         
         <p className="auth-terms">
-          By continuing, you agree to our <Link to="/terms">Terms of Service</Link> and <Link to="/privacy">Privacy Policy</Link>
+          By continuing, you agree to our <Link to="/terms">Terms of Service</Link> and <Link to="/terms">Privacy Policy</Link>
         </p>
       </div>
 

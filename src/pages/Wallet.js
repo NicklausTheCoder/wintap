@@ -66,10 +66,20 @@ function Wallet({ user }) {
     });
 
     // ✅ Read from winningsBalance, not winnings
-    const winningsRef = ref(database, `winningsBalance/${user.uid}`);
+    const winningsRef = ref(database, `winnings`);
     const winningsUnsub = onValue(winningsRef, (snap) => {
-      if (snap.exists()) setWinnings(snap.val());
-      else setWinnings({ balance: 0 });
+      let total = 0;
+      if (snap.exists()) {
+        snap.forEach((gameNode) => {
+          const userWins = gameNode.child(user.uid);
+          if (userWins.exists()) {
+            total += userWins.val().total || 0;
+          }
+        });
+      }
+
+      
+      setWinnings({ balance: total });
     });
 
     loadTransactions();
@@ -335,12 +345,25 @@ function Wallet({ user }) {
       const withdrawalRef = `WTH_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
       // ✅ Only touch winningsBalance, never wallet
-      const winningsSnap = await get(ref(database, `winningsBalance/${user.uid}`));
-      const currentWinnings = winningsSnap.exists() ? winningsSnap.val().balance || 0 : 0;
+      // Get total across all games
+      const winningsSnap = await get(ref(database, `winnings`));
+      let currentWinnings = 0;
+      if (winningsSnap.exists()) {
+        winningsSnap.forEach((gameNode) => {
+          const userWins = gameNode.child(user.uid);
+          if (userWins.exists()) {
+            currentWinnings += userWins.val().total || 0;
+          }
+        });
+      }
+
+
       const newWinningsBalance = currentWinnings - amount;
 
-      await update(ref(database, `winningsBalance/${user.uid}`), {
-        balance: newWinningsBalance,
+      // Update the specific game's total (you'll need to know which game)
+      // Or track withdrawals separately in a 'withdrawals' node
+      await update(ref(database, `winnings/checkers/${user.uid}`), {
+        total: newWinningsBalance,
         lastWithdrawn: new Date().toISOString(),
       });
 
@@ -549,7 +572,7 @@ function Wallet({ user }) {
                   disabled={winnings.balance < 3 || processingPayment}
                 >
                   {(winnings.balance || 0) < 3
-                     ? `Need $3 in winnings (you have ${formatCurrency(winnings.balance || 0)})`
+                    ? `Need $3 in winnings (you have ${formatCurrency(winnings.balance || 0)})`
                     : 'Start Withdrawal'}
                 </button>
               </>

@@ -15,7 +15,8 @@ function Profile({ user }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [editMode, setEditMode] = useState(false);
-  
+  const [winnings, setWinnings] = useState({ total: 0, count: 0 });
+
   // Form states
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -36,7 +37,7 @@ function Profile({ user }) {
     try {
       const usernameRef = ref(database, `lookups/byUsername/${usernameToCheck.toLowerCase()}`);
       const snapshot = await get(usernameRef);
-      
+
       // If username exists and it's not the current user's, it's taken
       if (snapshot.exists()) {
         const existingUserId = snapshot.val();
@@ -70,172 +71,197 @@ function Profile({ user }) {
     loadUserData();
   }, [user]);
 
- const loadUserData = async () => {
-  setLoading(true);
-  setError('');
-  
-  try {
-    console.log('📂 Loading profile for:', user.uid);
-    
-    // Try to read profile from user_profiles
-    const profileRef = ref(database, `user_profiles/${user.uid}`);
-    const profileSnapshot = await get(profileRef);
-    
-    // ALSO get the public user data which contains the username
-    const userPublicRef = ref(database, `users/${user.uid}/public`);
-    const userPublicSnapshot = await get(userPublicRef);
-    
-    // Get username from the public path
-    let userPublicData = {};
-    if (userPublicSnapshot.exists()) {
-      userPublicData = userPublicSnapshot.val();
-      console.log('✅ Public user data found:', userPublicData);
-    }
-    
-    if (profileSnapshot.exists()) {
-      console.log('✅ Profile found:', profileSnapshot.val());
-      const profileData = profileSnapshot.val();
-      setProfile(profileData);
-      setDisplayName(profileData.displayName || user.displayName || 'Player');
-      // Get username from public data, fallback to displayName
-      setUsername(userPublicData.username || profileData.displayName || user.displayName || 'Player');
-      setBio(profileData.bio || '');
-    } else {
-      console.log('🆕 No profile found, creating default...');
-      // Create default profile
-      const defaultUsername = userPublicData.username || user.displayName?.toLowerCase().replace(/\s+/g, '_') || 'player';
-      
-      const defaultProfile = {
-        displayName: user.displayName || 'Player',
-        username: defaultUsername,
-        bio: 'I love playing games and winning real money! 🎮',
-        rank: 'Bronze',
-        level: 1,
-        experience: 0,
-        joinDate: new Date().toISOString(),
-        totalGames: 0,
-        totalWins: 0,
-        totalLosses: 0,
-        winStreak: 0
-      };
-      
-      await set(profileRef, defaultProfile);
-      console.log('✅ Default profile created');
-      setProfile(defaultProfile);
-      setDisplayName(defaultProfile.displayName);
-      setUsername(defaultProfile.username);
-      setBio(defaultProfile.bio);
-    }
-    
-    // Load wallet (rest of your code stays the same)
-    const walletRef = ref(database, `wallets/${user.uid}`);
-    const walletSnapshot = await get(walletRef);
-    
-    if (walletSnapshot.exists()) {
-      console.log('💰 Wallet found:', walletSnapshot.val());
-      setWallet(walletSnapshot.val());
-    } else {
-      console.log('🆕 No wallet found, creating default...');
-      const defaultWallet = {
-        balance: 0,
-        totalWon: 0,
-        totalLost: 0,
-        currency: 'USD'
-      };
-      await set(walletRef, defaultWallet);
-      setWallet(defaultWallet);
-    }
-    
-  } catch (error) {
-    console.error('❌ Error loading profile:', error);
-    
-    if (error.code === 'PERMISSION_DENIED') {
-      setError('Database permission denied. Please check Firebase Realtime Database rules.');
-    } else {
-      setError('Failed to load profile: ' + error.message);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadUserData = async () => {
+    setLoading(true);
+    setError('');
 
-const handleProfileUpdate = async (e) => {
-  e.preventDefault();
-  
-  // Validate username if it changed
-  if (username !== profile?.username) {
-    const validationError = validateUsername(username);
-    if (validationError) {
-      setUsernameError(validationError);
-      return;
-    }
+    try {
+      console.log('📂 Loading profile for:', user.uid);
 
-    // Check if username is taken
-    setSaving(true);
-    const isTaken = await checkUsernameExists(username, user.uid);
-    setSaving(false);
+      // Try to read profile from user_profiles
+      const profileRef = ref(database, `user_profiles/${user.uid}`);
+      const profileSnapshot = await get(profileRef);
 
-    if (isTaken) {
-      setUsernameError('Username is already taken');
-      return;
-    }
-  }
+      // ALSO get the public user data which contains the username
+      const userPublicRef = ref(database, `users/${user.uid}/public`);
+      const userPublicSnapshot = await get(userPublicRef);
 
-  setSaving(true);
-  setError('');
-  setUsernameError('');
-  
-  try {
-    // Update user_profiles (add username field here too!)
-    const profileRef = ref(database, `user_profiles/${user.uid}`);
-    await update(profileRef, {
-      displayName,
-      username, // Add this line to save username in user_profiles too
-      bio,
-      lastUpdated: new Date().toISOString()
-    });
-
-    // Update main users path
-    const userRef = ref(database, `users/${user.uid}/public`);
-    await update(userRef, {
-      displayName,
-      username: username.toLowerCase(),
-      updatedAt: new Date().toISOString()
-    });
-
-    // If username changed, update lookups
-    if (username !== profile?.username) {
-      // Delete old lookup
-      if (profile?.username) {
-        await set(ref(database, `lookups/byUsername/${profile.username.toLowerCase()}`), null);
+      // Get username from the public path
+      let userPublicData = {};
+      if (userPublicSnapshot.exists()) {
+        userPublicData = userPublicSnapshot.val();
+        console.log('✅ Public user data found:', userPublicData);
       }
-      // Create new lookup
-      await set(ref(database, `lookups/byUsername/${username.toLowerCase()}`), user.uid);
+
+      if (profileSnapshot.exists()) {
+        console.log('✅ Profile found:', profileSnapshot.val());
+        const profileData = profileSnapshot.val();
+        setProfile(profileData);
+        setDisplayName(profileData.displayName || user.displayName || 'Player');
+        // Get username from public data, fallback to displayName
+        setUsername(userPublicData.username || profileData.displayName || user.displayName || 'Player');
+        setBio(profileData.bio || '');
+      } else {
+        console.log('🆕 No profile found, creating default...');
+        // Create default profile
+        const defaultUsername = userPublicData.username || user.displayName?.toLowerCase().replace(/\s+/g, '_') || 'player';
+
+        const defaultProfile = {
+          displayName: user.displayName || 'Player',
+          username: defaultUsername,
+          bio: 'I love playing games and winning real money! 🎮',
+          rank: 'Bronze',
+          level: 1,
+          experience: 0,
+          joinDate: new Date().toISOString(),
+          totalGames: 0,
+          totalWins: 0,
+          totalLosses: 0,
+          winStreak: 0
+        };
+
+        await set(profileRef, defaultProfile);
+        console.log('✅ Default profile created');
+        setProfile(defaultProfile);
+        setDisplayName(defaultProfile.displayName);
+        setUsername(defaultProfile.username);
+        setBio(defaultProfile.bio);
+      }
+
+      // Load wallet (rest of your code stays the same)
+      // Load wallet
+      const walletRef = ref(database, `wallets/${user.uid}`);
+      const walletSnapshot = await get(walletRef);
+
+      if (walletSnapshot.exists()) {
+        console.log('💰 Wallet found:', walletSnapshot.val());
+        setWallet(walletSnapshot.val());
+      } else {
+        console.log('🆕 No wallet found, creating default...');
+        const defaultWallet = {
+          balance: 0,
+          totalWon: 0,
+          totalLost: 0,
+          currency: 'USD'
+        };
+        await set(walletRef, defaultWallet);
+        setWallet(defaultWallet);
+      }
+
+      // ALWAYS load winnings regardless of wallet
+      await loadWinnings(user.uid);
+    } catch (error) {
+      console.error('❌ Error loading profile:', error);
+
+      if (error.code === 'PERMISSION_DENIED') {
+        setError('Database permission denied. Please check Firebase Realtime Database rules.');
+      } else {
+        setError('Failed to load profile: ' + error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadWinnings = async (userId) => {
+    try {
+      const winningsRef = ref(database, `winnings`);
+      const snapshot = await get(winningsRef);
+      let total = 0;
+      let count = 0;
+      if (snapshot.exists()) {
+        snapshot.forEach((gameNode) => {
+          const userWins = gameNode.child(userId);
+          if (userWins.exists()) {
+            total += userWins.val().total || 0;
+            count += userWins.val().count || 0;
+          }
+        });
+      }
+      setWinnings({ total, count });
+    } catch (error) {
+      console.error('Error loading winnings:', error);
+    }
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+
+    // Validate username if it changed
+    if (username !== profile?.username) {
+      const validationError = validateUsername(username);
+      if (validationError) {
+        setUsernameError(validationError);
+        return;
+      }
+
+      // Check if username is taken
+      setSaving(true);
+      const isTaken = await checkUsernameExists(username, user.uid);
+      setSaving(false);
+
+      if (isTaken) {
+        setUsernameError('Username is already taken');
+        return;
+      }
     }
 
-    // Update Firebase Auth display name
-    if (user.displayName !== displayName) {
-      await updateProfile(user, { displayName });
-    }
+    setSaving(true);
+    setError('');
+    setUsernameError('');
 
-    // Update local state
-    setProfile(prev => ({ ...prev, displayName, username, bio }));
-    setEditMode(false);
-    
-  } catch (error) {
-    console.error('Error updating profile:', error);
-    setError('Failed to update profile: ' + error.message);
-  } finally {
-    setSaving(false);
-  }
-};
+    try {
+      // Update user_profiles (add username field here too!)
+      const profileRef = ref(database, `user_profiles/${user.uid}`);
+      await update(profileRef, {
+        displayName,
+        username, // Add this line to save username in user_profiles too
+        bio,
+        lastUpdated: new Date().toISOString()
+      });
+
+      // Update main users path
+      const userRef = ref(database, `users/${user.uid}/public`);
+      await update(userRef, {
+        displayName,
+        username: username.toLowerCase(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // If username changed, update lookups
+      if (username !== profile?.username) {
+        // Delete old lookup
+        if (profile?.username) {
+          await set(ref(database, `lookups/byUsername/${profile.username.toLowerCase()}`), null);
+        }
+        // Create new lookup
+        await set(ref(database, `lookups/byUsername/${username.toLowerCase()}`), user.uid);
+      }
+
+      // Update Firebase Auth display name
+      if (user.displayName !== displayName) {
+        await updateProfile(user, { displayName });
+      }
+
+      // Update local state
+      setProfile(prev => ({ ...prev, displayName, username, bio }));
+      setEditMode(false);
+
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setError('Failed to update profile: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const formatCurrency = (amount) => {
+    const showDecimals = amount % 1 !== 0;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      minimumFractionDigits: showDecimals ? 2 : 0,
+      maximumFractionDigits: 2
     }).format(amount || 0);
   };
 
@@ -320,8 +346,8 @@ const handleProfileUpdate = async (e) => {
           <div className="profile-level">
             <span className="level-badge">Level {profile?.level || 1}</span>
             <div className="xp-bar">
-              <div 
-                className="xp-progress" 
+              <div
+                className="xp-progress"
                 style={{ width: `${(profile?.experience || 0) % 100}%` }}
               ></div>
             </div>
@@ -338,8 +364,8 @@ const handleProfileUpdate = async (e) => {
           </div>
           <div className="wallet-stats">
             <div className="stat-row">
-              <span>Total Won</span>
-              <span className="won">{formatCurrency(wallet?.totalWon || 0)}</span>
+              <span>Total Winnings</span>
+              <span className="won">{formatCurrency(winnings.total || 0)}</span>
             </div>
           </div>
           <Link to="/wallet" className="manage-wallet-btn">
@@ -426,8 +452,8 @@ const handleProfileUpdate = async (e) => {
                 <button type="submit" className="save-btn" disabled={saving}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="cancel-btn"
                   onClick={() => {
                     setEditMode(false);

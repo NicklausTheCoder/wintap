@@ -9,9 +9,10 @@ import './App.css';
 import PaynowTest from './pages/PaynowTest';
 import MobileOnly from './components/MobileWarning';
 
-
+import Terms from './pages/Terms';
 // Pages
 import Home from './pages/Home';
+import Contact from './pages/Contact';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -108,8 +109,10 @@ function App({ Component }) {
                 {/* Public Routes */}
                 <Route path="/" element={<Home user={user} />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/terms" element={<Terms user={user} />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/paynow-test" element={<PaynowTest />} />
+                <Route path='/contact' element={<Contact />} />
                 {/* Protected Routes */}
                 <Route path="/profile" element={user ? <Profile user={user} /> : <Login />} />
                 <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Login />} />

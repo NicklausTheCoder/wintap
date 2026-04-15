@@ -41,7 +41,7 @@ function Dashboard({ user }) {
     const profileRef = ref(database, `user_profiles/${user.uid}`);
     const walletRef = ref(database, `wallets/${user.uid}`);
     const gamesRef = ref(database, `users/${user.uid}/games`);
-    const winningsRef = ref(database, `winnings/${user.uid}`);
+    const winningsRef = ref(database, `winnings`);
 
     // Listen to wallet changes
     const walletUnsubscribe = onValue(walletRef, (snapshot) => {
@@ -59,9 +59,21 @@ function Dashboard({ user }) {
 
     // Load winnings
     const winningsUnsubscribe = onValue(winningsRef, (snapshot) => {
+      let total = 0;
+      let count = 0;
       if (snapshot.exists()) {
-        setWinnings(snapshot.val());
+        console.log('📊 Winnings snapshot:', snapshot.val()); // ← ADD THIS
+        snapshot.forEach((gameNode) => {
+          const userWins = gameNode.child(user.uid);
+          console.log(`Game ${gameNode.key}:`, userWins.val()); // ← ADD THIS
+          if (userWins.exists()) {
+            total += userWins.val().total || 0;
+            count += userWins.val().count || 0;
+          }
+        });
       }
+      console.log('💰 Calculated total winnings:', total); // ← ADD THIS
+      setWinnings({ total, count });
     });
 
     // Load recent games
@@ -70,8 +82,8 @@ function Dashboard({ user }) {
         const games = [];
         snapshot.forEach((gameSnapshot) => {
           const gameData = gameSnapshot.val();
-          games.push({ 
-            id: gameSnapshot.key, 
+          games.push({
+            id: gameSnapshot.key,
             ...gameData
           });
         });
@@ -104,14 +116,14 @@ function Dashboard({ user }) {
     return Math.round((profile.totalWins || 0) / profile.totalGames * 100);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount || 0);
-  };
+ const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,  // ← Show 2 decimal places
+    maximumFractionDigits: 2   // ← Keep 2 decimal places
+  }).format(amount || 0);
+};
 
   if (!user) {
     return <div className="loading-container">Redirecting...</div>;
@@ -134,7 +146,7 @@ function Dashboard({ user }) {
           <div className="welcome-text">
             <h1>Welcome back, {profile?.displayName?.split(' ')[0] || 'Player'}!</h1>
           </div>
-    
+
         </div>
       </header>
 
@@ -149,15 +161,17 @@ function Dashboard({ user }) {
               <p className="stat-value">{formatCurrency(wallet?.balance || 0)}</p>
             </div>
           </div>
-          
+
           <div className="stat-card">
             <div className="stat-icon">🏆</div>
             <div className="stat-details">
               <h3>Total Winnings</h3>
               <p className="stat-value">{formatCurrency(winnings.total || 0)}</p>
+
+              {console.log('Rendering winnings total:', winnings.total)} {/* ← ADD THIS */}
             </div>
           </div>
-          
+
           <div className="stat-card">
             <div className="stat-icon">📥</div>
             <div className="stat-details">
@@ -165,7 +179,7 @@ function Dashboard({ user }) {
               <p className="stat-value">{formatCurrency(wallet?.totalDeposited || 0)}</p>
             </div>
           </div>
-          
+
           <div className="stat-card">
             <div className="stat-icon">🎮</div>
             <div className="stat-details">
@@ -197,8 +211,8 @@ function Dashboard({ user }) {
             </div>
           </div>
           <div className="xp-bar">
-            <div 
-              className="xp-progress" 
+            <div
+              className="xp-progress"
               style={{ width: `${(profile?.experience || 0) % 100}%` }}
             ></div>
           </div>
@@ -229,7 +243,7 @@ function Dashboard({ user }) {
             <h2 className='text-white'>Game Stats</h2>
             <Link to="/games" className="view-all">View All →</Link>
           </div>
-          
+
           {recentGames.length > 0 ? (
             <div className="games-grid">
               {recentGames.slice(0, 3).map((game) => (

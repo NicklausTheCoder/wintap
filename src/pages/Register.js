@@ -159,7 +159,7 @@ function Register() {
           <Link to="/" className="back-to-home">← Back</Link>
           <h1>🎮 WinTap Games</h1>
           <h2>Create Account</h2>
-          <p className="auth-subtitle">Get $10 Welcome Bonus!</p>
+          
         </div>
 
         {error && <div className="error-message">{error}</div>}
