@@ -65,12 +65,18 @@ function Wallet({ user }) {
       setLoading(false);
     });
 
-    get(ref(database, `winnings/${user.uid}`)).then((snap) => {
+    // ✅ Read from winningsBalance, not winnings
+    const winningsRef = ref(database, `winningsBalance/${user.uid}`);
+    const winningsUnsub = onValue(winningsRef, (snap) => {
       if (snap.exists()) setWinnings(snap.val());
+      else setWinnings({ balance: 0 });
     });
 
     loadTransactions();
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      winningsUnsub();
+    };
   }, [user]);
 
   // ── Resume pending payment on mount (e.g. user refreshed mid-poll) ────────
@@ -218,78 +224,78 @@ function Wallet({ user }) {
 
   // ── Deposit handler ───────────────────────────────────────────────────────
 
- // ── Deposit handler ───────────────────────────────────────────────────────
+  // ── Deposit handler ───────────────────────────────────────────────────────
 
-const handleDeposit = async (e) => {
-  e.preventDefault();
-  if (processingPayment) return;
+  const handleDeposit = async (e) => {
+    e.preventDefault();
+    if (processingPayment) return;
 
-  const amount = parseFloat(depositAmount);
-  if (!amount || amount < 1) {
-    showMsg('❌ Minimum deposit is $1', 'error');
-    return;
-  }
-
-  // Always use 'web' as the method
-  const method = 'web';
-
-  setProcessingPayment(true);
-  setPollStatus('polling');
-  showMsg(`⏳ Sending payment request to Paynow…`, 'info');
-
-  try {
-    const res = await fetch(`${API_BASE}/api/paynow/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount,
-        email: user.email,
-        phone: '', // No phone needed for web
-        plan: 'wallet_deposit',
-        billingCycle: 'once',
-        userId: user.uid,
-        method: 'web',
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to initiate payment');
-    }
-
-    // Web redirect
-    if (data.redirectUrl) {
-      const pending = { reference: data.reference, pollUrl: data.pollUrl, amount, method: 'web' };
-      sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
-      window.location.href = data.redirectUrl;
+    const amount = parseFloat(depositAmount);
+    if (!amount || amount < 1) {
+      showMsg('❌ Minimum deposit is $1', 'error');
       return;
     }
 
-    // Fallback for any other response
-    const pending = {
-      reference: data.reference,
-      pollUrl: data.pollUrl,
-      amount,
-      method: 'web',
-    };
-    setPendingPayment(pending);
-    sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
-    showMsg('Complete payment in the Paynow window. Checking…', 'info');
-    startPolling(pending);
-    
-  } catch (err) {
-    console.error('Deposit error:', err);
-    setProcessingPayment(false);
-    setPollStatus('');
-    showMsg(`❌ ${err.message}`, 'error', 8000);
-  }
-};
+    // Always use 'web' as the method
+    const method = 'web';
+
+    setProcessingPayment(true);
+    setPollStatus('polling');
+    showMsg(`⏳ Sending payment request to Paynow…`, 'info');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/paynow/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          email: user.email,
+          phone: '', // No phone needed for web
+          plan: 'wallet_deposit',
+          billingCycle: 'once',
+          userId: user.uid,
+          method: 'web',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to initiate payment');
+      }
+
+      // Web redirect
+      if (data.redirectUrl) {
+        const pending = { reference: data.reference, pollUrl: data.pollUrl, amount, method: 'web' };
+        sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      // Fallback for any other response
+      const pending = {
+        reference: data.reference,
+        pollUrl: data.pollUrl,
+        amount,
+        method: 'web',
+      };
+      setPendingPayment(pending);
+      sessionStorage.setItem(`pending_payment_${user.uid}`, JSON.stringify(pending));
+      showMsg('Complete payment in the Paynow window. Checking…', 'info');
+      startPolling(pending);
+
+    } catch (err) {
+      console.error('Deposit error:', err);
+      setProcessingPayment(false);
+      setPollStatus('');
+      showMsg(`❌ ${err.message}`, 'error', 8000);
+    }
+  };
   // ── Withdraw handler (unchanged logic, credits winnings) ─────────────────
 
   const handleWithdrawClick = () => {
-    if (winnings.total < 5) {
-      showMsg('❌ Minimum withdrawal is $5 from winnings.', 'error');
+    if ((winnings.balance || 0) < 3) {
+      showMsg('❌ Minimum withdrawal is $3 from winnings.', 'error');
       return;
     }
     setShowWithdrawForm(true);
@@ -310,11 +316,17 @@ const handleDeposit = async (e) => {
 
     const amount = parseFloat(withdrawAmount);
     if (!amount || amount < 3) { showMsg('❌ Minimum withdrawal is $3', 'error'); return; }
-    if (amount > winnings.total) { showMsg(`❌ Only ${formatCurrency(winnings.total)} available in winnings`, 'error'); return; }
+    if (amount > (winnings.balance || 0)) {
+      showMsg(`❌ Only ${formatCurrency(winnings.balance)} available in winnings`, 'error');
+      return;
+    }
 
     const phone = ecocashNumber.replace(/\s+/g, '');
     if (!phone) { showMsg('❌ Enter your Ecocash number', 'error'); return; }
-    if (!validateZimPhone(phone)) { showMsg('❌ Invalid Ecocash number (10 digits, starts with 077/078)', 'error'); return; }
+    if (!validateZimPhone(phone)) {
+      showMsg('❌ Invalid Ecocash number (10 digits, starts with 077/078)', 'error');
+      return;
+    }
 
     setProcessingPayment(true);
     showMsg('⏳ Processing withdrawal…', 'info');
@@ -322,29 +334,27 @@ const handleDeposit = async (e) => {
     try {
       const withdrawalRef = `WTH_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-      const walletSnap = await get(ref(database, `wallets/${user.uid}`));
-      const current = walletSnap.val();
-      const newBalance = current.balance - amount;
+      // ✅ Only touch winningsBalance, never wallet
+      const winningsSnap = await get(ref(database, `winningsBalance/${user.uid}`));
+      const currentWinnings = winningsSnap.exists() ? winningsSnap.val().balance || 0 : 0;
+      const newWinningsBalance = currentWinnings - amount;
 
-      await update(ref(database, `wallets/${user.uid}`), {
-        balance: newBalance,
-        totalWithdrawn: (current.totalWithdrawn || 0) + amount,
-        lastUpdated: new Date().toISOString(),
-      });
-      await update(ref(database, `winnings/${user.uid}`), {
-        total: (winnings.total || 0) - amount,
+      await update(ref(database, `winningsBalance/${user.uid}`), {
+        balance: newWinningsBalance,
         lastWithdrawn: new Date().toISOString(),
       });
 
       await addTransaction(
         'withdrawal', -amount,
         `Withdrawal of $${amount} to Ecocash ${formatPhone(phone)} (Ref: ${withdrawalRef})`,
-        newBalance,
+        newWinningsBalance,
         { withdrawalReference: withdrawalRef, ecocashNumber: phone }
       );
 
       await set(ref(database, `withdrawals/${withdrawalRef}`), {
-        userId: user.uid, email: user.email, amount,
+        userId: user.uid,
+        email: user.email,
+        amount,
         reference: withdrawalRef,
         ecocashNumber: phone,
         formattedEcocashNumber: formatPhone(phone),
@@ -352,13 +362,14 @@ const handleDeposit = async (e) => {
         createdAt: new Date().toISOString(),
       });
 
-      const updatedWinnings = await get(ref(database, `winnings/${user.uid}`));
-      if (updatedWinnings.exists()) setWinnings(updatedWinnings.val());
-
       setShowWithdrawForm(false);
       setWithdrawAmount('');
       setEcocashNumber('');
-      showMsg(`✅ Withdrawal of $${amount} to ${formatPhone(phone)} submitted! Processing within 24 hours.`, 'success', 10000);
+      showMsg(
+        `✅ Withdrawal of $${amount} to ${formatPhone(phone)} submitted! Processing within 24 hours.`,
+        'success',
+        10000
+      );
     } catch (err) {
       console.error('Withdraw error:', err);
       showMsg(`❌ Withdrawal failed: ${err.message}`, 'error', 8000);
@@ -366,7 +377,6 @@ const handleDeposit = async (e) => {
       setProcessingPayment(false);
     }
   };
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -445,8 +455,8 @@ const handleDeposit = async (e) => {
             <button
               onClick={handleWithdrawClick}
               className="btn-withdraw-large"
-              disabled={winnings.total < 5 || processingPayment}
-              title={winnings.total < 5 ? 'Minimum withdrawal is $5 from winnings' : ''}
+              disabled={(winnings.balance || 0) < 3 || processingPayment}
+              title={(winnings.balance || 0) < 3 ? 'Minimum withdrawal is $3 from winnings' : ''}
             >
               - Withdraw
             </button>
@@ -458,7 +468,7 @@ const handleDeposit = async (e) => {
           {[
             { icon: '📥', label: 'Total Deposited', value: wallet.totalDeposited || 0 },
             { icon: '📤', label: 'Total Withdrawn', value: wallet.totalWithdrawn || 0 },
-            { icon: '🏆', label: 'Total Winnings', value: winnings.total || 0, green: true },
+            { icon: '🏆', label: 'Total Winnings', value: winnings.balance || 0, green: true },
             { icon: '🎁', label: 'Bonus Earned', value: wallet.totalBonus || 0 },
           ].map(({ icon, label, value, green }) => (
             <div key={label} className="stat-card">
@@ -529,17 +539,17 @@ const handleDeposit = async (e) => {
                 <p className="form-description">Withdraw your winnings to Ecocash</p>
                 <div className="withdraw-info">
                   <p>💰 Total Balance: <strong>{formatCurrency(wallet.balance || 0)}</strong></p>
-                  <p>🏆 Available Winnings: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
+                  <p>🏆 Available Winnings: <strong>{formatCurrency(winnings.balance || 0)}</strong></p>
                   <p className="withdraw-note">(Only winnings can be withdrawn, not deposits)</p>
                   <p>📋 Minimum: <strong>$3</strong> · ⏱️ Processing: <strong>~1 hour</strong></p>
                 </div>
                 <button
                   onClick={handleWithdrawClick}
                   className="btn-withdraw"
-                  disabled={winnings.total < 3 || processingPayment}
+                  disabled={winnings.balance < 3 || processingPayment}
                 >
-                  {winnings.total < 3
-                    ? `Need $3 in winnings (you have ${formatCurrency(winnings.total)})`
+                  {(winnings.balance || 0) < 3
+                     ? `Need $3 in winnings (you have ${formatCurrency(winnings.balance || 0)})`
                     : 'Start Withdrawal'}
                 </button>
               </>
@@ -547,8 +557,8 @@ const handleDeposit = async (e) => {
               <>
                 <h3>📤 Withdraw Winnings to Ecocash</h3>
                 <div className="withdraw-balance-info">
-                  <p>🏆 Available: <strong>{formatCurrency(winnings.total || 0)}</strong></p>
-                  <p className="withdraw-note">(Minimum $5)</p>
+                  <p>🏆 Available: <strong>{formatCurrency(winnings.balance || 0)}</strong></p>
+                  <p className="withdraw-note">(Minimum $3)</p>
                 </div>
                 <form onSubmit={handleWithdraw}>
                   <div className="form-group">
@@ -556,13 +566,13 @@ const handleDeposit = async (e) => {
                     <div className="amount-input">
                       <span className="currency-symbol">$</span>
                       <input
-                        type="number" min="5" step="1" max={winnings.total}
+                        type="number" min="3" step="1" max={winnings.balance || 0}
                         value={withdrawAmount}
                         onChange={(e) => setWithdrawAmount(e.target.value)}
-                        placeholder="5" required disabled={processingPayment}
+                        placeholder="3" required disabled={processingPayment}
                       />
                     </div>
-                    <small className="input-hint">Max: {formatCurrency(winnings.total || 0)}</small>
+                    <small className="input-hint">Max: {formatCurrency(winnings.balance || 0)}</small>
                   </div>
                   <div className="form-group">
                     <label>Ecocash Number</label>
@@ -584,15 +594,15 @@ const handleDeposit = async (e) => {
                   <div className="quick-amounts">
                     {[5, 10, 25, 50].map((v) => (
                       <button key={v} type="button"
-                        onClick={() => setWithdrawAmount(Math.min(v, winnings.total).toString())}
-                        disabled={winnings.total < v || processingPayment}
+                        onClick={() => setWithdrawAmount(Math.min(v, winnings.balance || 0).toString())}
+                        disabled={(winnings.balance || 0) < v || processingPayment}
                       >
                         ${v}
                       </button>
                     ))}
                     <button type="button"
-                      onClick={() => setWithdrawAmount(winnings.total.toString())}
-                      disabled={winnings.total < 5 || processingPayment}
+                      onClick={() => setWithdrawAmount((winnings.balance || 0).toString())}
+                      disabled={(winnings.balance || 0) < 3 || processingPayment}
                     >
                       Max
                     </button>
@@ -603,8 +613,8 @@ const handleDeposit = async (e) => {
                       disabled={
                         processingPayment ||
                         !withdrawAmount ||
-                        parseFloat(withdrawAmount) < 5 ||
-                        parseFloat(withdrawAmount) > winnings.total ||
+                        parseFloat(withdrawAmount) < 3 ||
+                        parseFloat(withdrawAmount) > (winnings.balance || 0) ||
                         !ecocashNumber ||
                         !validateZimPhone(ecocashNumber)
                       }
