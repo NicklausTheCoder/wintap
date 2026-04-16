@@ -163,26 +163,30 @@ function Profile({ user }) {
     }
   };
 
-  const loadWinnings = async (userId) => {
+ const loadWinnings = async (userId) => {
     try {
-      const winningsRef = ref(database, `winnings`);
-      const snapshot = await get(winningsRef);
-      let total = 0;
-      let count = 0;
-      if (snapshot.exists()) {
-        snapshot.forEach((gameNode) => {
-          const userWins = gameNode.child(userId);
-          if (userWins.exists()) {
-            total += userWins.val().total || 0;
-            count += userWins.val().count || 0;
-          }
-        });
-      }
-      setWinnings({ total, count });
+        const winningsRef = ref(database, `winnings/${userId}`);
+        const snapshot = await get(winningsRef);
+        let total = 0;
+        let count = 0;
+        
+        if (snapshot.exists()) {
+            // Iterate through each game the user won
+            snapshot.forEach((gameNode) => {
+                const amount = gameNode.val().amount;
+                if (amount && typeof amount === 'number') {
+                    total += amount;
+                    count++;
+                }
+            });
+        }
+        
+        setWinnings({ total, count });
+        console.log(`💰 Loaded winnings for ${userId}: $${total} (${count} wins)`);
     } catch (error) {
-      console.error('Error loading winnings:', error);
+        console.error('Error loading winnings:', error);
     }
-  };
+};
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();

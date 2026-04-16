@@ -66,19 +66,13 @@ function Wallet({ user }) {
     });
 
     // ✅ Read from winningsBalance, not winnings
-    const winningsRef = ref(database, `winnings`);
+    const winningsRef = ref(database, `winningsBalance/${user.uid}`);
     const winningsUnsub = onValue(winningsRef, (snap) => {
       let total = 0;
       if (snap.exists()) {
-        snap.forEach((gameNode) => {
-          const userWins = gameNode.child(user.uid);
-          if (userWins.exists()) {
-            total += userWins.val().total || 0;
-          }
-        });
+        total = snap.child('balance').val() || 0;
       }
 
-      
       setWinnings({ balance: total });
     });
 

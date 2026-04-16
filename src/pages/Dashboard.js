@@ -58,22 +58,11 @@ function Dashboard({ user }) {
     });
 
     // Load winnings
-    const winningsUnsubscribe = onValue(winningsRef, (snapshot) => {
-      let total = 0;
-      let count = 0;
-      if (snapshot.exists()) {
-        console.log('📊 Winnings snapshot:', snapshot.val()); // ← ADD THIS
-        snapshot.forEach((gameNode) => {
-          const userWins = gameNode.child(user.uid);
-          console.log(`Game ${gameNode.key}:`, userWins.val()); // ← ADD THIS
-          if (userWins.exists()) {
-            total += userWins.val().total || 0;
-            count += userWins.val().count || 0;
-          }
-        });
-      }
-      console.log('💰 Calculated total winnings:', total); // ← ADD THIS
-      setWinnings({ total, count });
+    const winningsBalanceRef = ref(database, `winningsBalance/${user.uid}`);
+    const winningsUnsubscribe = onValue(winningsBalanceRef, (snapshot) => {
+      const total = snapshot.exists() ? (snapshot.val().balance || 0) : 0;
+      console.log(`💰 Total winnings: $${total}`);
+      setWinnings({ total, count: 0 });
     });
 
     // Load recent games
@@ -116,14 +105,14 @@ function Dashboard({ user }) {
     return Math.round((profile.totalWins || 0) / profile.totalGames * 100);
   };
 
- const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,  // ← Show 2 decimal places
-    maximumFractionDigits: 2   // ← Keep 2 decimal places
-  }).format(amount || 0);
-};
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,  // ← Show 2 decimal places
+      maximumFractionDigits: 2   // ← Keep 2 decimal places
+    }).format(amount || 0);
+  };
 
   if (!user) {
     return <div className="loading-container">Redirecting...</div>;
