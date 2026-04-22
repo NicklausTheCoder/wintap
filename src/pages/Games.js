@@ -25,7 +25,7 @@ function Games({ user }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const SECRET_KEY = 'my-super-secret-key-123';
-  const GAME_URL_BASE = 'https://flappy-games.onrender.com';
+  const GAME_URL_BASE = 'https://games.wintapgames.com';
 
   const GAME_URLS = {
     'flappy-bird': `${GAME_URL_BASE}/flappy-bird`,
